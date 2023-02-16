@@ -1,1 +1,4 @@
 
+token: 000:xxxxxxxx # Telegram bot token
+ti-url: https://your.site/api/ # Tastyigniter API endpoint
+ti-token: xxx # https://tastyigniter.com/docs/extensions/api

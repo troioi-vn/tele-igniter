@@ -24,7 +24,18 @@ else:
     logger.info("Configuration loaded")
 
 # Connecting to Tastyigniter API
+import requests, json
+# TODO: Check ti-token. If fail - create new Tastyigniter token 
+# https://tastyigniter.com/docs/extensions/api
+# curl -X POST --data "username=my_user&password=my_password&device_name=my_device" https://your.url/api/token
+
 # Load Menu items
+headers =  {"Content-Type":"application/json", "Authorization": f"Bearer {config['ti-token']}"}
+response = requests.get(f"{config['ti-url']}/menus", headers=headers)
+print(response.json())
+                            
+exit(0)
+
 # Load Users
 
 
