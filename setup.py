@@ -64,8 +64,8 @@ config = open(".config.yml", "w")
 # Write configuration to .config.yml line by line
 for line in default_config:
     # Check if line contains telegram-token, ti-url or ti-token
-    if "telegram-token:" in line:
-        config.write(f"token: {enterd_token}")
+    if "tg-token:" in line:
+        config.write(f"tg-token: {enterd_token}")
     elif "ti-url:" in line:
         config.write(f"ti-url: {entered_ti_url}")
     elif "ti-token:" in line:
