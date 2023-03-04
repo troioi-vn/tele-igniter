@@ -1,12 +1,15 @@
 # Telegram bot token
 tg-token: 
-
 # Tastyigniter API URL (https://your.site/api/)
 ti-url: 
-
 # Tastyigniter token (How to obtain token https://tastyigniter.com/docs/extensions/api)
 # curl -X POST --data "username=my_user&password=my_password&device_name=my_device" https://your.url/api/token
 ti-token: 
+ti-api-max-attempts: 50
+ti-api-cache: False
 
-location_id: 1
-start-message: "Hi! I'm a bot that will help you order food from Testignighter."
+location-ids:
+  - 1
+start-message: "Hi! I'm a bot that will help you order food from Tastyigniter"
+max-quantity: 99
+
