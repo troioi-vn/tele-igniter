@@ -3,11 +3,6 @@
 This bot provides a frontend for online food ordering on Telegram using Testignighter as a backend.
 GitHub https://github.com/troioi-vn/tele-igniter
 '''
-# TODO Check workhours for each location
-# TODO Notifications for orders
-# TODO Chat with admin
-# TODO Add support for multiple languages
-# TODO Admin panel
 
 import os, yaml, logging, requests, json, time, hashlib, random, string
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ReplyKeyboardMarkup, KeyboardButton
@@ -77,6 +72,7 @@ class Dialogue:
 			'phone': None,
 			'location': None,
 			'address': None,
+			'coupon': None,
 			# Tastyigniter user ID for future use in full integration with Tastyigniter user system...
 			'ti_user_id': None
 		}
@@ -139,11 +135,14 @@ class Dialogue:
 		self.save()
   
 	def update_name(self, first_name, last_name):
-		'''Update user name.'''
-		self.user = {
-			'first_name': first_name,
-			'last_name': last_name,
-		}
+		'''Update user first_name and last_name.'''
+		self.user['first_name'] = first_name
+		self.user['last_name'] = last_name
+		self.save()
+
+	def update_coupon(self, coupon: dict | None) -> None:
+		'''Update user coupon.'''
+		self.user['coupon'] = coupon
 		self.save()
 
 	def cart_append(self, item_id: int, quantity: int) -> str:
@@ -220,6 +219,7 @@ class Dialogue:
 			self.nav[key] = None
 		self.save()
 
+
 class TastyIgniter:
 	'''API class for Tastyigniter API requests.'''
 	def __init__(self):
@@ -278,7 +278,7 @@ class TastyIgniter:
 
 		# Get currencies list
 		self.currencies = self.request(f"currencies?enabled=true&pageLimit=1000")['data']
-   
+		
 		# Get coupons list
 		self.coupons = self.request(f"coupons?include=menus&enabled=true&pageLimit=1000")['data']
    
@@ -425,6 +425,30 @@ class TastyIgniter:
 		return None
 
 
+class helpers:
+	'''Helper functions.'''
+	def __init__(self):
+		pass
+
+	def format_amount(self, amount: float | int | str, code: str = config['ti-currency-code'], decimals: int = 0) -> str:
+		'''Format amount to string with currency symbol.'''
+		# Convert amount to float
+		amount = float(amount)
+		# Add thousands separator if amount is greater than 1000
+		if amount > 1000:
+			amount = f"{amount:,.{decimals}f}"
+		else:
+			amount = f"{amount:.{decimals}f}"
+
+		# Replace coma with space
+		amount = amount.replace(",", " ")
+
+		# Get currency symbol from ti.currencies dictionary by an attribute currency_code
+		currency_symbol = next((currency['attributes']['currency_symbol'] for currency in ti.currencies if currency['attributes']['currency_code'] == code), None)
+		# Return formatted amount
+		return f"{amount} {currency_symbol}"
+
+
 def dialogue_run(user: dict) -> Dialogue:
     # Create a new dialogue for this user in global dialogues dictionary
 	if user['id'] not in dialogues:
@@ -439,10 +463,16 @@ def dialogue_run(user: dict) -> Dialogue:
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-	"""Send a message when the command /start is issued."""
+	"""Send a start-message and a keyboard with all locations on /start command."""
+	# Delete cached user json file from cache folder named by user ID.json
+	filename = f"cache/{update.message.from_user['id']}.json"
+	if os.path.isfile(filename):
+		logger.info(f"Deleting cached user file {filename}")
+		os.remove(filename)
+ 
 	dialogue = dialogue_run(update.message.from_user)
 	logger.info(f"User {dialogue.user_id} sent /start command")
-	
+
 	# Send start message
 	reply_text = config['start-message']
 	keyboard = []
@@ -668,7 +698,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 								default_option_value_id = option_value['option_value_id']
 
 							# Add option button
-							keyboard.append([InlineKeyboardButton(f"{option_value['name']} (+{option_value['price']} VND)", callback_data=f"cart-{str(uid)}-setoption-{str(option_value['menu_option_value_id'])}")])
+							keyboard.append([InlineKeyboardButton(f"{option_value['name']} (+{h.format_amount(option_value['price'])} VND)", callback_data=f"cart-{str(uid)}-setoption-{str(option_value['menu_option_value_id'])}")])
 						
 						# Add Skip button if option is not required and default option value is set
 						if not option['attributes']['required']:
@@ -703,20 +733,59 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 				reply_text += "\n\nCart is empty"
 			else:
 				# Set message text
-				reply_text = "<b>Cart</b>"
+				reply_text = "🛒 <b>Your order is:</b>\n"
 				# Show items in cart and sum subtotal price
 				subtotal = 0
+				k = 0
 				for cart_item in dialogue.cart:
+					k += 1
 					item = ti.menu_items[cart_item['id']]['data']
 					subtotal += item['attributes']['menu_price'] * cart_item['quantity']
 					# Add items to the message text
-					reply_text += f"\n<b>{item['attributes']['menu_name']}</b> - {item['attributes']['menu_price']} x {cart_item['quantity']}"
-					# Add options to message text
+					if cart_item['quantity'] == 1:
+						reply_text += f"\n<b>{k}. {item['attributes']['menu_name']}</b>  {h.format_amount(item['attributes']['menu_price'])}"
+					else:
+						reply_text += f"\n<b>{k}. {item['attributes']['menu_name']}</b>  {h.format_amount(item['attributes']['menu_price'])} x {cart_item['quantity']}"
+						items_prise = item['attributes']['menu_price'] * cart_item['quantity']
+						reply_text += f" = {h.format_amount(items_prise)}"
+					# Add options to the message text
 					if len(cart_item['options']) > 0:
 						for option in cart_item['options']:
-							reply_text += f"\n{option['name']} (+{option['price']} VND)"
-				# Add subtotal to message text
-				reply_text += f"\n<b>Subtotal</b> - {subtotal} VND"
+							reply_text += f"\n{option['name']} (+{h.format_amount(option['price'])})"
+							subtotal += option['price']
+
+				total = subtotal
+				discount = 0
+    
+				# Apply coupon			
+				if dialogue.user['coupon'] != None:
+					coupon = dialogue.user['coupon']
+					# Check coupon type
+					if coupon['attributes']['type'] == "F": # Fixed amount
+						discount = float(coupon['attributes']['discount'])
+						reply_text += f"\n\n🎁 <code>{coupon['attributes']['code']}</code> (-{h.format_amount(discount)})"
+						total -= discount
+					elif coupon['attributes']['type'] == "P": # Percentage
+						discount = subtotal * coupon['attributes']['discount'] / 100
+						reply_text += f"\n\n🎁 <code>{coupon['attributes']['code']}</code> (-{coupon['attributes']['discount']}%)"
+						total -= discount
+      
+				# If discount is greater than subtotal, set discount to subtotal
+				if discount > subtotal:
+					discount = subtotal
+     
+				# If total is less than 0, set total to 0
+				if total < 0:
+					total = 0
+     
+				# If discount > 0 add discount to message text
+				if discount > 0:
+					reply_text += f"\n\nSubtotal: {h.format_amount(subtotal)}"
+					reply_text += f"\nDiscount: -{h.format_amount(discount)}"
+					reply_text += f"\n<b>Total: {h.format_amount(total)}</b>"
+				else:
+					reply_text += f"\n\n<b>Total: {h.format_amount(total)}</b>"
+				
 				# Add checkout button
 				keyboard.append([InlineKeyboardButton("✅ Checkout", callback_data="cart-0-checkout")])
 				# Create clear cart and edit cart buttons
@@ -725,7 +794,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 					InlineKeyboardButton("✏️ Edit cart", callback_data="cart-0-edit")]
 				)
 				# Create button for enter coupon code
-				keyboard.append([InlineKeyboardButton("🎟 Enter coupon code", callback_data="cart-0-coupon")])
+				keyboard.append([InlineKeyboardButton("🎁 Enter coupon code", callback_data="cart-0-coupon")])
+    
+				# Print coupon code
+				#if dialogue.coupon != None:
+				#	reply_text += f"\n\n<b>Coupon code</b> - {dialogue.coupon['code']}"
 		# Handle clear cart
 		elif action == "clear":
 			# Clear cart
@@ -837,7 +910,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 						item = ti.menu_items[cart_item['id']]['data']
 						subtotal += item['attributes']['menu_price'] * cart_item['quantity']
 						# Add items to message text
-						reply_text += f"\n\n<b>{item['attributes']['menu_name']}</b> - {item['attributes']['menu_price']} x {cart_item['quantity']}"
+						reply_text += f"\n\n<b>{item['attributes']['menu_name']}</b> - {h.format_amount(item['attributes']['menu_price'])} x {cart_item['quantity']}"
 					# Add subtotal to message text
 					reply_text += f"\n\n<b>Subtotal</b> - {subtotal} VND"
 					# Add checkout button
@@ -882,17 +955,26 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 		if query.data.startswith("location-"):
 			navigation_buttons.append([InlineKeyboardButton("📍", callback_data="resetlocation-request")])
   
-	# Add cart button if cart is not empty
+	# Home and cart buttons management
+	show_home_button = True
+	show_cart_button = False
+ 	# Add cart button if cart is not empty and current action is not cart
 	items_in_cart = dialogue.cart_count()
-	if items_in_cart > 0:
-		# If not already in cart, add cart button
-		if not query.data.startswith("cart"):
-			navigation_buttons.append([InlineKeyboardButton(f"🛒 Cart ({items_in_cart})", callback_data="cart")])
-   
+	if items_in_cart > 0: show_cart_button = True
+	if query.data.startswith("cart"): show_cart_button = False
+	if query.data.startswith("cart-0-coupon"): show_home_button = False
+	elif query.data.startswith("location-"): show_home_button = False
+	# contains addtocart but not ended with addtocart
+	elif "addtocart" in query.data and not query.data.endswith("addtocart"):
+		show_home_button = False
+		show_cart_button = False
+  
+	if show_cart_button:
+		navigation_buttons.append([InlineKeyboardButton(f"🛒 Cart ({items_in_cart})", callback_data="cart")])
+  
 	# If location is set, add home button to navigation buttons
-	if dialogue.nav['current_location'] is not None and not query.data.startswith("location-"):
-		if not query.data.startswith("cart-0-coupon"):
-			navigation_buttons.append([InlineKeyboardButton("🏠 Home", callback_data="location-"+str(dialogue.nav['current_location']))])
+	if dialogue.nav['current_location'] & show_home_button:
+		navigation_buttons.append([InlineKeyboardButton("🏠 Home", callback_data="location-"+str(dialogue.nav['current_location']))])
 	
 	# Add navigation buttons if there are any
 	keyboard += navigation_buttons
@@ -933,6 +1015,9 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 				# dialogue.cart_add_coupon(coupon)
 				# Add text to reply
 				reply_text += f"Coupon {text} added!"
+    
+				# Add coupon to cart
+				dialogue.update_coupon(coupon)
     
 				# Send sticker
 				await query.reply_sticker(config['success-sticker'])
@@ -1020,4 +1105,5 @@ def main() -> None:
 
 if __name__ == "__main__":
 	ti = TastyIgniter()
+	h = helpers()
 	main()

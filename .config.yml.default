@@ -7,6 +7,7 @@ ti-url:
 ti-token: 
 ti-api-max-attempts: 50
 ti-api-cache: False
+ti-currency-code: VND
 
 location-ids:
   - 1
