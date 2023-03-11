@@ -27,6 +27,7 @@ Final goal is to have a bot that can be used by any restaurant that uses TestyIg
 - Update setup.py, and test on a clean server
 - Chat with admin from the bot
 - Multi language support
+- Get closest locatios when when the user shares his location
 
 ### First release
 - Support user matching between Telegram and Testyigniter
