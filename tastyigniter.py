@@ -6,8 +6,7 @@ class TastyIgniter():
         '''Initialize API class.'''
         self.config = config
         self.attempts = 0 # Number of attempts to connect to API
-        
-  
+
         self.active_locations = [] # Locations list
         self.locations = {} # Locations dictionary by location_id
         self.menus = {} # Menus dictionary by ['location_id']['category_id']
@@ -41,6 +40,12 @@ class TastyIgniter():
         else:
             self.logger.info("Tastyigniter API cache is disabled")
   
+        self.load()
+        # print_menus() # DEBUG. Print menus for all active locations
+
+    def load(self):
+        self.active_locations = []
+        
         # Get active locations for connection check
         response = self.request(f"locations?location_status=true")['data']
 
@@ -89,8 +94,6 @@ class TastyIgniter():
    
             # Load menu
             self.menus[location_id] = self.load_menu(location_id)    
-
-        # print_menus() # DEBUG. Print menus for all active locations
 
     def load_menu(self, location_id: int) -> dict:
         '''Load menu for a specific location.'''
@@ -151,31 +154,32 @@ class TastyIgniter():
             request = uri
         # Check if there is a cached response if caching is enabled
         if self.config['ti-api-cache']:
-            # Generate filename from URI via md5 hash
-            filename = hashlib.md5(uri.encode()).hexdigest()
-            if os.path.isfile(f"cache/{filename}.json"):
-                with open(f"cache/{filename}.json", "r") as f:
+            # Generate filename
+            filename = hashlib.md5(uri.encode()).hexdigest()[:8]
+            if os.path.isfile(f"cache/req_{filename}.json"):
+                with open(f"cache/req_{filename}.json", "r") as f:
                     return json.load(f)
 
         # Delay every 30 requests to avoid 429 error
         self.api_request_counter += 1
-        if self.api_request_counter == 30:
-            print("Waiting 0.5 seconds to avoid 429 error")
-            time.sleep(0.5)
-            self.api_request_counter = 0
-            return self.request(uri)
 
         # Create Bearer authorization header
         headers =  {"Content-Type":"application/json", "Authorization": f"Bearer {self.config['ti-token']}"}
 
         # Request API
         try:
-            response = requests.get(f"{self.url}/{request}", headers=headers)
+            response = requests.get(f"{self.config['ti-url']}/{request}", headers=headers)
         except Exception as e:
-            self.logger.error(f"Error {response.status_code} while connecting to Tastyigniter API")        
+            self.logger.error(f"Error {response.status_code} while connecting to Tastyigniter API")
+                    
             # Repeat request if there are less than 5 errors
             if self.attempts < self.config['ti-api-max-attempts']:
                 self.attempts += 1
+                # handle Error 429:
+                if response.status_code == 429:
+                    self.loggger.info("Waiting 1 second to avoid 429 error")
+                    time.sleep(1)
+                    
                 return self.request(uri)
             # Exit the program if there are more than 5 errors
             else:
@@ -196,15 +200,22 @@ class TastyIgniter():
                 # Cache response to file if caching is enabled
                 if self.config['ti-api-cache']:
                     # Save response to file
-                    # Generate filename from URI via md5 hash
-                    filename = hashlib.md5(uri.encode()).hexdigest()
-                    with open(f"cache/{filename}.json", "w") as file:
+                    # Generate unique filename
+                    filename = hashlib.md5(uri.encode()).hexdigest()[:8]
+                    with open(f"cache/req_{filename}.json", "w") as file:
                         file.write(json.dumps(resp, indent=4))
                 return resp # Return JSON response
             else:
                 self.logger.error(f"Error while retrieving {uri}")
                 self.logger.error(f"Error {response.status_code}: {response.text}")
                 exit(1)
+
+    def clear_cache(self):
+        '''Clear cache directory.'''
+        for file in os.listdir("cache"):
+            # If filename contains "req_" then it is a cached request
+            if file.startswith("req_"):
+                os.remove(f"cache/{file}")
 
     def get_item_options(self, item_id) -> list:
         '''Get item options from user cart.'''

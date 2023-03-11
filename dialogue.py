@@ -1,8 +1,9 @@
-import json, os, random, string
+from classes import Config
+import json, os, random, string, logging
 
 class Dialogue:
     '''Class for storing user dialogs.'''
-    def __init__(self, user_id):
+    def __init__(self, user_id, is_admin: bool = False):
         '''Initialize Dialogue class.'''
         self.user_id = user_id # Telegram user ID
         self.user = {
@@ -30,8 +31,19 @@ class Dialogue:
         }
         self.cart = []
 
+        # Set up the logger
+        # Set up the logger
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S',
+        )
+        self.logger = logging.getLogger(__name__)
+
         # Load user dialog from json file
         self.load()
+
+        self.is_admin = is_admin
 
     def save(self):
         '''Save user dialog to json file.'''
@@ -43,19 +55,19 @@ class Dialogue:
             'user': self.user
         }
         # Save user dialog to json file
-        with open(f"cache/{int(self.user_id)}.json", "w") as file:
+        with open(f"cache/user_{int(self.user_id)}.json", "w") as file:
             json.dump(dialogue, file)
         file.close()
         
     def load(self):
         '''Load user dialog from json file.'''
         # Check if user dialog file exists
-        if not os.path.isfile(f"cache/{int(self.user_id)}.json"):
+        if not os.path.isfile(f"cache/user_{int(self.user_id)}.json"):
             print(f"User dialog file {int(self.user_id)}.json not found")
             return False
 
         # Load user dialog from json file
-        with open(f"cache/{int(self.user_id)}.json", "r") as file:
+        with open(f"cache/user_{int(self.user_id)}.json", "r") as file:
             dialogue = json.load(file)
    
         # Update user dialog
@@ -155,4 +167,24 @@ class Dialogue:
         for key in self.nav:
             self.nav[key] = None
         self.save()
+    
+        '''Check if user is admin.'''
+        # Load config
+        config = Config()
+        
+        if self.user_id in config['admins']:
+            return True
+        return False
 
+    def nav_get_current_location(self) -> dict:
+        '''Get current location.'''
+        current_location = self.nav['current_location']
+        
+        if current_location is None:
+            # set to first location in config
+            config = Config()
+            current_location = config['locations'][0]
+            self.update_nav('current_location', current_location)
+            self.logger.warning(f"User {self.user_id} has no current location. Set to {current_location['name']}")
+        
+        return int(current_location)
