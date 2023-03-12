@@ -19,10 +19,10 @@ from telegram.constants import ParseMode
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a start-message and a keyboard with all locations on /start command."""
     # Delete cached user json file from cache folder named by user ID.json
-    filename = f"cache/{update.message.from_user['id']}.json"
+    user_id = update.message.from_user['id']
+    filename = f"cache/user_{int(user_id)}.json"
     if os.path.isfile(filename):
         logger.info(f"Deleting cached user file {filename}")
-        os.remove(filename)
  
     dialogue = dialogue_run(update.message.from_user)
     logger.info(f"User {dialogue.user_id} sent /start command")
@@ -44,17 +44,32 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text(reply_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+    sent =  await update.message.reply_text(reply_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+    
+    # Store message ID to dialogue for deleting later
+    cat = dialogue.nav['message_ids'] + [sent.message_id] if 'message_ids' in dialogue.nav else [sent.message_id]
+    dialogue.update_nav('message_ids', cat)
 
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Parses the CallbackQuery and updates the message text."""
     query = update.callback_query
+    # Answer the query
+    await query.answer()
     dialogue = dialogue_run(query.from_user)    
  
     # Log this event to logger
     logger.info(f"User {dialogue.user_id} pressed button {query.data}")
     
+    # Check if we have more then one message in the dialogue
+    if len(dialogue.nav['message_ids']) > 1:
+        # Delete all messages except the last one
+        for message_id in dialogue.nav['message_ids'][:-1]:
+            await context.bot.delete_message(chat_id=query.message.chat_id, message_id=message_id)
+            
+        # Keep only the last message ID in dialogue
+        dialogue.update_nav('message_ids', dialogue.nav['message_ids'][-1:])
+
     # If current location is not set, set it to the first active location
     if dialogue.nav['current_location'] is None:
         dialogue.nav['current_location'] = ti.active_locations[0]['id']
@@ -370,7 +385,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     reply_text += f"\n\n<b>Total: {format_amount(total, config['ti-currency-code'])}</b>"
                 
                 # Add checkout button
-                keyboard.append([InlineKeyboardButton("✅ Checkout", callback_data="cart-0-checkout")])
+                keyboard.append([InlineKeyboardButton("✅ Checkout", callback_data="checkout")])
                 # Create clear cart and edit cart buttons
                 keyboard.append([
                     InlineKeyboardButton("🗑 Clear cart", callback_data="cart-0-clear"),
@@ -479,25 +494,67 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             # Disable home and cart buttons
             show_home_button = False
             show_cart_button = False
-        # Handle checkout
-        elif action == "checkout":
-                # Check if cart is empty
-                if dialogue.cart_count() == 0:
-                    reply_text += "\n\nYour cart is empty"
-                    reply_text += "\nPlease add items to the cart"
-                else:
-                    # Show items in cart and sum subtotal price
-                    subtotal = 0
-                    for cart_item in dialogue.cart:
-                        item = ti.menu_items[cart_item['id']]['data']
-                        subtotal += item['attributes']['menu_price'] * cart_item['quantity']
-                        # Add items to message text
-                        reply_text += f"\n\n<b>{item['attributes']['menu_name']}</b> - {format_amount(item['attributes']['menu_price'], item['attributes']['currency'])} x {cart_item['quantity']}"
-                    # Add subtotal to message text
-                    reply_text += f"\n\n<b>Subtotal</b> - {format_amount(subtotal, config['ti-currency-code'])}"
-                    # Add checkout button
-                    keyboard.append([InlineKeyboardButton("Checkout", callback_data="cart-0-checkout-confirm")])
+    
+    # Handle checkout
+    elif query.data.startswith("checkout"):
+            reply_text += "<b>Checkout</b>"
             
+            # Check if cart is empty
+            if dialogue.cart_count() == 0:
+                reply_text += "\n\nYour cart is empty. Please add some items to cart"
+                # Create button to home screen
+                keyboard.append([InlineKeyboardButton("🏠 Home", callback_data=f"location-{dialogue.nav['current_location']}")])
+            # Check if user did not enter phone number
+            elif dialogue.user['phone'] == None:
+                # Request user to enter phone number
+                reply_text = "Please enter your phone number to continue."
+                reply_text += "\n\nYou can enter your phone number or send it to me by pressing the button below."
+                
+                dialogue.update_nav('text_requested_for', 'phone')
+                dialogue.update_nav('after_request_screen', 'cart')
+                reply_markup=ReplyKeyboardMarkup([
+                    [KeyboardButton("Send phone number", request_contact=True)],
+                    [KeyboardButton("❌ Cancel")] # ❌ is a sign to go after_request_screen
+                ])
+                await query.message.reply_text(reply_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+                return
+            else:
+                order = dialogue.user['order']
+                '''
+                Requare user to enter:
+                - Payment method (default: cod)
+                - Delivery method (default: delivery)
+                - Delivery address or user location
+                
+                Optional:
+                - Ask for delivery time 
+                - Ask for phone number
+                - Ask for comment
+                '''
+                
+                # Liast all checkout parameters and their values
+                reply_text += "\n\n"
+                # Delivery method
+                if order['order_type'] == 'delivery':
+                    # Delivery method
+                    reply_text += f"🚚 Your order will be delivered to: <b>{order['delivery_address']}</b>\n"
+                elif order['order_type'] == 'collection':
+                    # Delivery method
+                    reply_text += f"You can pick up your order from: <b>{ti.active_locations[dialogue.nav['current_location']]['name']}</b>\n"
+                    # Location address
+                    reply_text += f"📍 Address: <b>{ti.active_locations[dialogue.nav['current_location']]['location_address_1']}</b>\n"
+                    if ti.active_locations[dialogue.nav['current_location']]['location_address_2']:
+                        reply_text += f"<b>{ti.active_locations[dialogue.nav['current_location']]['location_address_2']}</b>\n"
+                
+                # Payment method
+                reply_text += f"💵 Payment method: <b>{dialogue.checkout['payment_method']}</b>\n"
+                
+                # Add button to change delivery method
+                keyboard.append([InlineKeyboardButton("Change delivery method", callback_data=f"checkout-deliverymethod")])
+                
+                # Add button to change payment method
+                keyboard.append([InlineKeyboardButton("Change payment method", callback_data=f"checkout-paymentmethod")])
+    
     # Handle location reset request and confirmation
     elif query.data.startswith("resetlocation-"):
         # Get step from button data
@@ -541,9 +598,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             
         # Create back button
         keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data="location-"+str(dialogue.nav['current_location']))])    
- 
-    # Answer the query
-    await query.answer()
 
     # Update the message from which the query originated
     # KEYBOARD MANAGEMENT #
@@ -595,7 +649,17 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # If we have a text message
     if query.text is not None:
         text = query.text
-        # Handle coupone code if text_requested_for == 'coupon_code'
+        # Handle cancel request, to go back the "one-message mode"
+        if text.startswith('❌'):
+            reply_text += "Cancelled"
+            
+            # Reset text_requested_for
+            dialogue.update_nav('text_requested_for', None)
+            
+            # Add continue button
+            keyboard.append([InlineKeyboardButton("Continue", callback_data=dialogue.nav['after_request_screen'])])
+            
+        # Handle coupone code
         if dialogue.nav['text_requested_for'] == 'coupon_code':
             coupon = ti.get_coupon(text)
             if coupon is not None:
@@ -659,7 +723,7 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Request telephone number if '/phone' is sent
     if update.message.text == "/phone":
         # Send contact sare request
-        await update.message.reply_text("Please send your phone number", reply_markup=ReplyKeyboardMarkup([[KeyboardButton("Send phone number", request_contact=True)]], one_time_keyboard=True))    
+        await update.message.reply_text("Please send your phone number", reply_markup=ReplyKeyboardMarkup([[KeyboardButton("Send phone number", request_contact=True)]], one_time_keyboard=True))
 
     # replay with the same message
     await update.message.reply_text(update.message.text)
@@ -712,7 +776,6 @@ if __name__ == "__main__":
         datefmt='%Y-%m-%d %H:%M:%S',
     )
     logger = logging.getLogger(__name__)
-
 
     config = Config()
     ti = TastyIgniter(config)

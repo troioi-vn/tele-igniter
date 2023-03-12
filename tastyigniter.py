@@ -85,6 +85,9 @@ class TastyIgniter():
         # Get coupons list
         self.coupons = self.request(f"coupons?include=menus&enabled=true&pageLimit=1000")['data']
    
+        # Get customers list
+        self.customers = self.request(f"customers?include=addresses&pageLimit=1000")['data']
+   
         self.logger.info("Loading menus for active locations...")
         # Load categories and menu items for each active location
         for location in self.active_locations:

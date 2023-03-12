@@ -5,6 +5,7 @@ class Dialogue:
     '''Class for storing user dialogs.'''
     def __init__(self, user_id, is_admin: bool = False):
         '''Initialize Dialogue class.'''
+        self.config = Config()
         self.user_id = user_id # Telegram user ID
         self.user = {
             'first_name': None,
@@ -13,8 +14,60 @@ class Dialogue:
             'location': None,
             'address': None,
             'coupon': None,
-            # Tastyigniter user ID for future use in full integration with Tastyigniter user system...
-            'ti_user_id': None
+            'ti-customer': {},
+            'order': {
+                # Required
+                'customer_id': None,
+                'location_id': None,
+                'first_name':  None,
+                'last_name':  None,
+                'email': self.config['ti-customer']['email'],
+                'order_type': 'delivery', # delivery | collection (for pick-up)
+                'total_items' : 0,
+                'order_total': 0.0,
+                'order_totals': [
+                    {
+                        # 'order_total_id': 792, ??? What is this?
+                        'order_id': 0,
+                        'code': 'subtotal',
+                        'title': 'Sub Total',
+                        'value': 0.0,
+                        'priority': 0,
+                        'is_summable': 0
+                    },
+                    {
+                        # 'order_total_id': 791,
+                        'order_id': 0,
+                        'code': 'delivery',
+                        'title': 'Delivery',
+                        'value': 0.0,
+                        'priority': 100,
+                        'is_summable': 1
+                    },
+                    {
+                        # 'order_total_id': 793,
+                        'order_id': 0,
+                        'code': 'total',
+                        'title': 'Order Total',
+                        'value': 0.0,
+                        'priority': 127,
+                        'is_summable': 0
+                    }
+                ],
+                'order_menus': [],
+                
+                # Optional
+                'telephone': None,
+                'comment': None,
+                'delivery_comment': None,
+                'order_time_is_asap': True,
+                'order_date': None,
+                'order_time': None,
+                'payment': 'cod', # cod | card
+                'processed': 0,
+                'status_id': 0,
+                'status_comment': None,
+            }
         }
         # Navigation
         self.nav = {
@@ -28,6 +81,7 @@ class Dialogue:
             },
             'text_requested_for': None,
             'after_request_screen': None,
+            'message_ids': [], # Message IDs we sent to user. Used for deleting messages.
         }
         self.cart = []
 
@@ -170,9 +224,9 @@ class Dialogue:
     
         '''Check if user is admin.'''
         # Load config
-        config = Config()
+        self.config = Config()
         
-        if self.user_id in config['admins']:
+        if self.user_id in self.config['admins']:
             return True
         return False
 
