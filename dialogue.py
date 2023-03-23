@@ -127,6 +127,8 @@ class Dialogue:
         # Update user dialog
         self.user_id = dialogue['user_id']
         self.nav = dialogue['nav']
+        if self.nav['message_ids'] is None:
+            self.nav['message_ids'] = []
         self.cart = dialogue['cart']
         self.user = dialogue['user']
         file.close()
@@ -237,8 +239,10 @@ class Dialogue:
         if current_location is None:
             # set to first location in config
             config = Config()
-            current_location = config['locations'][0]
+            current_location = config['location-ids'][0]
             self.update_nav('current_location', current_location)
-            self.logger.warning(f"User {self.user_id} has no current location. Set to {current_location['name']}")
+            self.logger.warning(f"User {self.user_id} has no current location. Set to {current_location}")
+
+            self.save()
         
         return int(current_location)

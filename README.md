@@ -12,6 +12,7 @@ Final goal is to have a bot that can be used by any restaurant that uses TestyIg
 
 ## Roadmap
 ### MVP List of stoppers
+- Show location working hours and current status
 - BUG: If item has no options, it is adeed to cart but there is no button to go back to the item "added to your cart" screen
 - Aply coupon to the item in the cart
 - Filtr coupons by location
