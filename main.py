@@ -4,7 +4,7 @@ This bot provides a frontend for online food ordering on Telegram using Testigni
 GitHub https://github.com/troioi-vn/tele-igniter
 '''
 
-import os, logging
+import os, logging, re
 
 from classes import Config
 from dialogue import Dialogue
@@ -14,7 +14,7 @@ from helpers import format_amount
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 from telegram.constants import ParseMode
-
+from telegram.error import BadRequest
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a start-message and a keyboard with all locations on /start command."""
@@ -54,22 +54,30 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Parses the CallbackQuery and updates the message text."""
     query = update.callback_query
-    # Answer the query
-    await query.answer()
+    
     dialogue = dialogue_run(query.from_user)    
  
     # Log this event to logger
     logger.info(f"User {dialogue.user_id} pressed button {query.data}")
     
+    
     # Check if we have more then one message in the dialogue
+    '''
     if len(dialogue.nav['message_ids']) > 1:
         # Delete all messages except the last one
-        for message_id in dialogue.nav['message_ids'][:-1]:
-            await context.bot.delete_message(chat_id=query.message.chat_id, message_id=message_id)
+        try:
+            for message_id in dialogue.nav['message_ids'][:-1]:
+                await context.bot.delete_message(chat_id=query.message.chat_id, message_id=message_id)
+                # remove message ID from dialogue
+                dialogue.nav['message_ids'].remove(message_id)
+        except Exception as e:
+            logger.error(f"Error deleting message: {e}")
+        else:
+            logger.info(f"Deleted {len(dialogue.nav['message_ids'])-1} messages")
             
         # Keep only the last message ID in dialogue
         dialogue.update_nav('message_ids', dialogue.nav['message_ids'][-1:])
-
+    '''
     # If current location is not set, set it to the first active location
     if dialogue.nav['current_location'] is None:
         dialogue.nav['current_location'] = ti.active_locations[0]['id']
@@ -84,6 +92,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Prepare navigation buttons
     show_home_button = True 
     show_cart_button = True if dialogue.cart_count() else False
+ 
+    
  
     # Handle home section (location selection)
     if query.data.startswith("location-"):
@@ -100,6 +110,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
  
         # Add location name to reply text
         reply_text += f"📍<b>{ti.locations[location_id]['attributes']['location_name']}</b>"
+        
+        # add location description to reply text
+        reply_text += f"\n{ti.locations[location_id]['attributes']['description']}"
         
         # If user is admin, add admin tag
         if dialogue.user_id in config['admins']:
@@ -354,14 +367,40 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
                 total = subtotal
                 discount = 0
-    
+
+                # Check delivery type
+                if dialogue.user['order']['order_type'] == 'delivery':
+                    # Delivery fee
+                    # TODO: Add delivery fee calculation
+                    # delivery_fee = ti.get_delivery_fee(subtotal, location_id)
+                    # Temporary solution config delivery fee tmp-delivery-fee and tmp-delivery-free-limit - amount of order to get free delivery
+                    delivery_fee = config['tmp-delivery-fee']
+                    delivery_free_limit = config['tmp-delivery-free-limit']
+
+                    if subtotal >= delivery_free_limit:
+                        delivery_fee = 0
+                    
+                    if delivery_fee == 0:
+                        if delivery_free_limit > 0:
+                            reply_text += f"\n\nDelivery fee: <s>{format_amount(config['tmp-delivery-fee'], item['attributes']['currency'])}</s> {format_amount(0, item['attributes']['currency'])}"
+                        else:
+                            reply_text += f"\n\nDelivery fee: {format_amount(0, item['attributes']['currency'])}"
+                    else:
+                        reply_text += f"\n\nDelivery fee: {format_amount(delivery_fee, item['attributes']['currency'])}"
+                        reply_text += " (Free delivery for orders over " + format_amount(config['tmp-delivery-free-limit'], item['attributes']['currency']) + ")"
+                        total += delivery_fee
+                # Pickup
+                elif dialogue.user['order']['order_type'] == 'collection':
+                    # Add pickup address to the message text
+                    reply_text += f"\n\nPickup address: {ti.active_locations[location_id]['data']['attributes']['address']}"
+
                 # Apply coupon            
                 if dialogue.user['coupon'] != None:
                     coupon = dialogue.user['coupon']
                     # Check coupon type
                     if coupon['attributes']['type'] == "F": # Fixed amount
                         discount = float(coupon['attributes']['discount'])
-                        reply_text += f"\n\n🎁 <code>{coupon['attributes']['code']}</code> (-{format_amount(discount)})"
+                        reply_text += f"\n\n🎁 <code>{coupon['attributes']['code']}</code> (-{format_amount(discount, config['ti-currency-code'])})"
                         total -= discount
                     elif coupon['attributes']['type'] == "P": # Percentage
                         discount = subtotal * coupon['attributes']['discount'] / 100
@@ -384,8 +423,11 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 else:
                     reply_text += f"\n\n<b>Total: {format_amount(total, config['ti-currency-code'])}</b>"
                 
-                # Add checkout button
-                keyboard.append([InlineKeyboardButton("✅ Checkout", callback_data="checkout")])
+                # Add select delivery type button and checkout button
+                keyboard.append([
+                    InlineKeyboardButton("🚚 Delivery type", callback_data="cart-0-delivery"),
+                    InlineKeyboardButton("✅ Checkout", callback_data="checkout"),
+                ])
                 # Create clear cart and edit cart buttons
                 keyboard.append([
                     InlineKeyboardButton("🗑 Clear cart", callback_data="cart-0-clear"),
@@ -481,7 +523,24 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
    
             # Create button the item in the menu item-{item_id}
             keyboard.append([InlineKeyboardButton(f"⬅️ Back to {item['attributes']['menu_name']}", callback_data=f"item-{item_id}")])
-   
+        # Handle delivery type selection. Set dialogue.user['order']['order_type'] = "delivery" | "collection"
+        elif action == "delivery":
+            # Get delivery types
+            # TODO: ti.get_delivery_types(location_id, total)
+            delivery_types = ['delivery', 'collection']
+            if params == None:
+                
+                # Add text to reply
+                reply_text += "\n\nWill you pick up the order yourself or choose delivery?"
+                reply_text += f"\n\nAddress: {ti.active_locations[location_id]['attributes']['address']}"
+                # Add delivery types to reply text
+                for delivery_type in delivery_types:
+                    # Add delivery type button
+                    keyboard.append([InlineKeyboardButton(delivery_type['attributes']['name'], callback_data=f"cart-0-delivery-{delivery_type['id']}")])
+                # Create back button to cart
+                keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data="cart")])
+            else:
+                pass
         # Coupon code handling
         elif action == "coupon":
             # Wait for coupon code
@@ -631,7 +690,24 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if image is not None:
         reply_text = reply_text + f" <a href=\"{image}\">.</a>"
     
-    await query.message.edit_text(reply_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+    # Answer the query
+    await query.answer()
+    
+    # List of allowed HTML tags
+    allowed_tags = ['b', 'strong', 'i', 'em', 'u', 'ins', 's', 'strike', 'del', 'span', 'a', 'code', 'pre']
+    
+    # Rmove all tags that are not allowed
+    reply_text = re.sub(r'<(?!\/?(?:' + '|'.join(allowed_tags) + r'))[^>]+>', '', reply_text)
+    
+    # Remove <br> and <p> tags
+    reply_text = re.sub(r'<br>|<p>', '', reply_text)
+
+    try:
+        await query.message.edit_text(reply_text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+    except BadRequest:
+        await query.message.edit_text(config['unknown-err'], reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+        logger.error("Error while sending message")
+        logger.error(reply_text)
 
 
 async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
