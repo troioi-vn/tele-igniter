@@ -1,3 +1,5 @@
+from bs4 import BeautifulSoup
+
 def format_amount(amount: float | int | str, code: str = 'USD', decimals: int = 0) -> str:
         '''Format amount to string with currency symbol.'''
         symbols = {
