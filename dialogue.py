@@ -110,9 +110,9 @@ class Dialogue:
         }
         # Save user dialog to json file
         with open(f"cache/user_{int(self.user_id)}.json", "w") as file:
-            json.dump(dialogue, file)
+            json.dump(dialogue, file, default=[])
         file.close()
-        
+
     def load(self):
         '''Load user dialog from json file.'''
         # Check if user dialog file exists

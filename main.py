@@ -17,7 +17,7 @@ from telegram.constants import ParseMode, MessageEntityType
 from telegram.error import BadRequest
 
 
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Parses
         - CallbackQueris
         - /start command
@@ -25,6 +25,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         - location messages
         - phone messages
     """
+    
+    dialogue = dialogue_run(update.effective_user)
     
     # Variables for reply
     reply_text = ''
@@ -42,10 +44,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
     # Check if this is a command
     if update.message is not None and update.message.entities is not None and update.message.entities[0].type == MessageEntityType.BOT_COMMAND:
-        dialogue = dialogue_run(update.message.from_user)
-        # What command was sent?
         command = update.message.text.split()[0]
-        logger.info(f"User {dialogue.user_id} sent command {command}")
+        logger.info(f"User {update.message.from_user.id} sent command {command}")
 
         # Handle /start command
         if command == "/start":
@@ -53,6 +53,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             filename = f"cache/user_{int(dialogue.user_id)}.json"
             if os.path.isfile(filename):
                 logger.info(f"Deleting cached user file {filename}")
+        
+            # Delete dialogue object
+            del dialogues[dialogue.user_id]
+            
+            # Recreate dialogue object
+            dialogue = dialogue_run(update.message.from_user)
         
             # Send start message
             reply_text = config['start-message']
@@ -68,9 +74,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 for location in ti.active_locations:
                     keyboard.append([InlineKeyboardButton(location['attributes']['location_name'], callback_data="location-"+str(location['id']))])
     
-    if update.callback_query is not None:# Answer the query
+    if update.callback_query is not None:
         query = update.callback_query        
-        dialogue = dialogue_run(query.from_user)
+        # dialogue = dialogue_run(query.from_user)
         existed_message = True
         # Log this event to logger
         logger.info(f"User {dialogue.user_id} pressed button {query.data}")
@@ -715,7 +721,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         dialogue.update_nav('message_ids', dialogue.nav['message_ids'][-1:])
     
 
-
 async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''Handle any message that is not a command'''
     query = update.message
@@ -835,10 +840,10 @@ def main() -> None:
     application = Application.builder().token(config['tg-token']).build()
  
     # Add handlers for start and help commands
-    application.add_handler(CommandHandler("start", button))
+    application.add_handler(CommandHandler("start", process_usser_action))
  
     # Add a handler for callback query
-    application.add_handler(CallbackQueryHandler(button))
+    application.add_handler(CallbackQueryHandler(process_usser_action))
 
     # Add a handler for text messages
     application.add_handler(MessageHandler(filters.TEXT | filters.LOCATION | filters.CONTACT, msg))
