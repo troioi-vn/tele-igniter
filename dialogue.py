@@ -218,6 +218,11 @@ class Dialogue:
                 item_in_cart = item
         return item_in_cart
     
+    def set_order_type(self, order_type: str) -> None:
+        '''Set order type.'''
+        self.user['order']['order_type'] = order_type
+        self.save()
+    
     def nav_reset(self) -> None:
         '''Clear user navigation.'''
         for key in self.nav:

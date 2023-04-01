@@ -68,9 +68,7 @@ class TastyIgniter():
                 # So we can't get location details via API
                 # TODO: create an issue on Tastyigniter GitHub 
                 # https://github.com/tastyigniter/ti-ext-api/blob/master/docs/locations.md
-                
-                
-                
+
                 parsed_location = self.parse_location_info(location)
                 location['options'] = parsed_location['options']
                 location['schedule'] = parsed_location['schedule']
@@ -237,7 +235,7 @@ class TastyIgniter():
             if file.startswith("req_"):
                 os.remove(f"cache/{file}")
 
-    def get_item_options(self, item_id) -> list:
+    def get_item_options(self, item_id: int) -> list:
         '''Get item options from user cart.'''
         # WARNING: For now only one option and only radio buttons are supported
         available_item_options = []
@@ -247,6 +245,40 @@ class TastyIgniter():
                     available_item_options.append(menu_option)
                     break
         return available_item_options
+
+    def get_location_info(self, location_id: int) -> dict:
+        parsed_location = self.parse_location_info(self.active_locations[location_id])
+        self.active_locations[location_id]['options'] = parsed_location['options']
+        self.active_locations[location_id]['schedule'] = parsed_location['schedule']
+        return self.active_locations[location_id]
+
+    def get_location_address(self, location_id: int) -> str:
+        # Return location address: location_address_1 + location_address_2 + location_city
+        return f"{self.active_locations[location_id]['attributes']['location_address_1']} {self.active_locations[location_id]['attributes']['location_address_2']} {self.active_locations[location_id]['attributes']['location_city']}"
+
+    def get_location_name(self, location_id: int) -> str:
+        return self.active_locations[location_id]['attributes']['location_name']
+
+    def get_location_working_hours(self, location_id: str) -> str:
+        # Return location working hours: turn location['schedule'] into a string
+        return f"{self.active_locations[location_id]['schedule']}"
+
+    def is_location_open(self, location_id: int) -> dict:
+        # Check location schedule and return True of False for opening, delivery and pickup 
+        # Example of schedule: {'opening': {'mon': {'start': '12:00 pm', 'end': '08:00 pm'}, 'tue': {'start': '00:00 pm', 'end': '00:00 pm'}, 'wed': {'start': '00:00 pm', 'end': '00:00 pm'}, 'thu': {'start': '12:00 pm', 'end': '08:00 pm'}, 'fri': {'start': '12:00 pm', 'end': '08:00 pm'}, 'sat': {'start': '12:00 pm', 'end': '08:00 pm'}, 'sun': {'start': '12:00 pm', 'end': '08:00 pm'}}, 'delivery': {'mon': {'start': '12:00 pm', 'end': '08:00 pm'}, 'tue': {'start': '00:00 pm', 'end': '00:00 pm'}, 'wed': {'start': '00:00 pm', 'end': '00:00 pm'}, 'thu': {'start': '12:00 pm', 'end': '08:00 pm'}, 'fri': {'start': '12:00 pm', 'end': '08:00 pm'}, 'sat': {'start': '12:00 pm', 'end': '08:00 pm'}, 'sun': {'start': '12:00 pm', 'end': '08:00 pm'}}, 'pickup': {'mon': {'start': '12:00 pm', 'end': '08:00 pm'}, 'tue': {'start': '00:00 pm', 'end': '00:00 pm'}, 'wed': {'start': '00:00 pm', 'end': '00:00 pm'}, 'thu': {'start': '12:00 pm', 'end': '08:00 pm'}, 'fri': {'start': '12:00 pm', 'end': '08:00 pm'}, 'sat': {'start': '12:00 pm', 'end': '08:00 pm'}, 'sun': {'start': '12:00 pm', 'end': '08:00 pm'}}}
+        is_open = {'opening': False, 'delivery': False, 'pickup': False}
+        now = datetime.datetime.now()
+
+        for key in is_open:
+            schedule = self.active_locations[location_id]['schedule'][key]
+            for day in schedule:
+                if day == now.strftime("%a").lower():
+                    if schedule[day]['start'] != '00:00 pm' and schedule[day]['end'] != '00:00 pm':
+                        start = datetime.datetime.strptime(schedule[day]['start'], '%I:%M %p')
+                        end = datetime.datetime.strptime(schedule[day]['end'], '%I:%M %p')
+                        if start <= now <= end:
+                            is_open[key] = True
+        return is_open  
 
     def get_coupon(self, coupon_code: str) -> dict:
         '''Check if coupon code is valid.'''

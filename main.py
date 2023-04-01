@@ -81,6 +81,8 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
         # Log this event to logger
         logger.info(f"User {dialogue.user_id} pressed button {query.data}")
 
+        location_id = dialogue.nav_get_current_location()
+
         # Handle home section (location selection)
         if query.data.startswith("location-"):
             location_id = int(query.data.split("-")[1])
@@ -93,16 +95,21 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
     
             # Save current location ID to dialogue
             dialogue.update_nav('current_location', location_id)
-    
-            # Add location name to reply text
-            reply_text += f"📍<b>{ti.locations[location_id]['attributes']['location_name']}</b>"
+
+            location = ti.get_location_info(location_id)
             
-            # add location description to reply text
-            reply_text += f"\n{ti.locations[location_id]['attributes']['description']}"
+            # Add location name to reply text
+            reply_text += f"📍<b>{location['attributes']['location_name']}</b>"
             
             # If user is admin, add admin tag
             if dialogue.user_id in config['admins']:
-                reply_text += f" (admin)"
+                reply_text += f" [admin]"
+            
+            # Add location description to reply text
+            reply_text += f"\n{location['attributes']['description']}"
+            
+            reply_text += f"\n\nDelivery: {location['options']['offer_delivery']}"
+            reply_text += f"\nPickup: {location['options']['offer_collection']}"
             
             # Offer to select a category 
             for category_id in menu:
@@ -123,7 +130,6 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
         # Handle category section
         elif query.data.startswith("category-"):
             category_id = int(query.data.split("-")[1])
-            location_id = dialogue.nav_get_current_location()
             menu = ti.menus[location_id]
     
             # Save current category ID to dialogue
@@ -160,7 +166,6 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
             # Get item data
             item = ti.menu_items[item_id]['data']
     
-            location_id = dialogue.nav['current_location']
             category_id = dialogue.nav['current_category']
             menu = ti.menus[location_id]
 
@@ -326,7 +331,7 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
                     reply_text += "\n\nCart is empty"
                 else:
                     # Set message text
-                    reply_text = "🛒 <b>Your order is:</b>\n"
+                    reply_text = "🛒 <b>Your order is:</b>"
                     # Show items in cart and sum subtotal price
                     subtotal = 0
                     k = 0
@@ -381,7 +386,8 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
                     # Pickup
                     elif dialogue.user['order']['order_type'] == 'collection':
                         # Add pickup address to the message text
-                        reply_text += f"\n\nPickup address: {ti.active_locations[location_id]['data']['attributes']['address']}"
+                        reply_text += f"\n\nPick up from: {ti.get_location_name(location_id)}"
+                        reply_text += f"\nAddress: {ti.get_location_address(location_id)}"
 
                     # Apply coupon            
                     if dialogue.user['coupon'] != None:
@@ -412,9 +418,9 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
                     else:
                         reply_text += f"\n\n<b>Total: {format_amount(total, config['ti-currency-code'])}</b>"
                     
-                    # Add select delivery type button and checkout button
+                    # Add select order_type button and checkout button
                     keyboard.append([
-                        InlineKeyboardButton("🚚 Delivery type", callback_data="cart-0-delivery"),
+                        InlineKeyboardButton(f"{config['ti-order-types'][dialogue.user['order']['order_type']]['emoji']} {dialogue.user['order']['order_type'].capitalize()}", callback_data="cart-0-order_type"),
                         InlineKeyboardButton("✅ Checkout", callback_data="checkout"),
                     ])
                     # Create clear cart and edit cart buttons
@@ -510,24 +516,34 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
     
                 # Create button the item in the menu item-{item_id}
                 keyboard.append([InlineKeyboardButton(f"⬅️ Back to {item['attributes']['menu_name']}", callback_data=f"item-{item_id}")])
-            # Handle delivery type selection. Set dialogue.user['order']['order_type'] = "delivery" | "collection"
-            elif action == "delivery":
-                # Get delivery types
-                # TODO: ti.get_delivery_types(location_id, total)
-                delivery_types = ['delivery', 'collection']
+            # Handle order_type type selection. Set dialogue.user['order']['order_type'] = "delivery" | "collection"
+            elif action == "order_type":
                 if params == None:
-                    
+                    attributes = ti.active_locations[location_id]['attributes']
                     # Add text to reply
                     reply_text += "\n\nWill you pick up the order yourself or choose delivery?"
-                    reply_text += f"\n\nAddress: {ti.active_locations[location_id]['attributes']['address']}"
-                    # Add delivery types to reply text
-                    for delivery_type in delivery_types:
-                        # Add delivery type button
-                        keyboard.append([InlineKeyboardButton(delivery_type['attributes']['name'], callback_data=f"cart-0-delivery-{delivery_type['id']}")])
+                    reply_text += f"\n\nRestaurant: {ti.get_location_name(location_id)}"
+                    reply_text += f"\nAddress: {ti.get_location_address(location_id)}"
+                    
+                    # Add order type buttons
+                    for delivery_type in config['ti-order-types']:
+                        keyboard.append([InlineKeyboardButton(f"{config['ti-order-types'][delivery_type]['emoji']} {delivery_type.capitalize()}", callback_data=f"cart-0-order_type-{delivery_type}")])
+                        
                     # Create back button to cart
                     keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data="cart")])
+                elif params in config['ti-order-types']:
+                    # Set order type
+                    dialogue.set_order_type(params)
+                    # Set reply text
+                    reply_text += f"\n\nOrder type set to {params}"
+                    # Create button to cart
+                    keyboard.append([InlineKeyboardButton("⬅️ Back to cart", callback_data="cart")])
                 else:
-                    pass
+                    logger.error(f"Invalid order type: {params}")
+                    # Set reply text
+                    reply_text += f"\n\nInvalid order type"
+                    # Create button to cart
+                    keyboard.append([InlineKeyboardButton("⬅️ Back to cart", callback_data="cart")])
             # Coupon code handling
             elif action == "coupon":
                 # Wait for coupon code
@@ -708,7 +724,7 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
             logger.error(reply_text)
 
     # Check if we have more then one message in the dialogue
-    if len(dialogue.nav['message_ids']) > 1:
+    if 'message_ids' in dialogue.nav and len(dialogue.nav['message_ids']) > 1:
         # Delete all messages except the last one
         for message_id in dialogue.nav['message_ids'][:-1]:
             try:
