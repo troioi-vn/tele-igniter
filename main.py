@@ -74,6 +74,9 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
                 for location in ti.active_locations:
                     keyboard.append([InlineKeyboardButton(location['attributes']['location_name'], callback_data="location-"+str(location['id']))])
     
+            show_home_button = False
+            show_cart_button = False
+    
     if update.callback_query is not None:
         query = update.callback_query        
         # dialogue = dialogue_run(query.from_user)
@@ -126,6 +129,9 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
             if dialogue.is_admin:
                 # Reload button
                 navigation_buttons.append([InlineKeyboardButton("🔄 Reload", callback_data="admin-reload")])
+            
+            show_home_button = False
+            show_cart_button = False
                 
         # Handle category section
         elif query.data.startswith("category-"):
@@ -685,7 +691,7 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
     if len(keyboard) > 0:
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # If there is no text, set it to '...'
+    # If there is no text, set default text
     if reply_text == '':
         reply_text = config['unknown-err']
         logger.warning("Sending empty message")
@@ -722,6 +728,10 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
             await update.message.reply_text(config['unknown-err'], reply_markup=reply_markup, parse_mode=ParseMode.HTML)
             logger.error("Error while sending message")
             logger.error(reply_text)
+
+    # BUG: sometimes nav['message_ids'] is not defined
+    if type(dialogue.nav['message_ids']) is not list:
+        dialogue.nav['message_ids'] = []
 
     # Check if we have more then one message in the dialogue
     if 'message_ids' in dialogue.nav and len(dialogue.nav['message_ids']) > 1:

@@ -247,10 +247,33 @@ class TastyIgniter():
         return available_item_options
 
     def get_location_info(self, location_id: int) -> dict:
-        parsed_location = self.parse_location_info(self.active_locations[location_id])
-        self.active_locations[location_id]['options'] = parsed_location['options']
-        self.active_locations[location_id]['schedule'] = parsed_location['schedule']
-        return self.active_locations[location_id]
+        # Return location object
+        
+        # find location by id in active_locations
+        for location in self.active_locations:
+            if int(location['id']) == location_id:
+                # update location with parsed location info (TEMP FIX)
+                parsed_location = self.parse_location_info(location)
+                location['options'] = parsed_location['options']
+                location['schedule'] = parsed_location['schedule']
+                return location        
+
+    def loacation_will(self, location_id: int) -> dict:
+        # Return location next opening/closing time for 'delivery', 'collection' and 'opening'
+        will = {'delivery': '', 'collection': '', 'opening': ''}
+        location = self.get_location_info(location_id)
+        now = datetime.now()
+        
+        if location['options']['offer_delivery']:
+            # Find closing time for delivery
+            
+            
+            
+             
+            will['delivery'] = f"Delivery will close at"
+        else:
+            will['delivery'] = f"Delivery starts at"
+        return will
 
     def get_location_address(self, location_id: int) -> str:
         # Return location address: location_address_1 + location_address_2 + location_city
@@ -261,24 +284,7 @@ class TastyIgniter():
 
     def get_location_working_hours(self, location_id: str) -> str:
         # Return location working hours: turn location['schedule'] into a string
-        return f"{self.active_locations[location_id]['schedule']}"
-
-    def is_location_open(self, location_id: int) -> dict:
-        # Check location schedule and return True of False for opening, delivery and pickup 
-        # Example of schedule: {'opening': {'mon': {'start': '12:00 pm', 'end': '08:00 pm'}, 'tue': {'start': '00:00 pm', 'end': '00:00 pm'}, 'wed': {'start': '00:00 pm', 'end': '00:00 pm'}, 'thu': {'start': '12:00 pm', 'end': '08:00 pm'}, 'fri': {'start': '12:00 pm', 'end': '08:00 pm'}, 'sat': {'start': '12:00 pm', 'end': '08:00 pm'}, 'sun': {'start': '12:00 pm', 'end': '08:00 pm'}}, 'delivery': {'mon': {'start': '12:00 pm', 'end': '08:00 pm'}, 'tue': {'start': '00:00 pm', 'end': '00:00 pm'}, 'wed': {'start': '00:00 pm', 'end': '00:00 pm'}, 'thu': {'start': '12:00 pm', 'end': '08:00 pm'}, 'fri': {'start': '12:00 pm', 'end': '08:00 pm'}, 'sat': {'start': '12:00 pm', 'end': '08:00 pm'}, 'sun': {'start': '12:00 pm', 'end': '08:00 pm'}}, 'pickup': {'mon': {'start': '12:00 pm', 'end': '08:00 pm'}, 'tue': {'start': '00:00 pm', 'end': '00:00 pm'}, 'wed': {'start': '00:00 pm', 'end': '00:00 pm'}, 'thu': {'start': '12:00 pm', 'end': '08:00 pm'}, 'fri': {'start': '12:00 pm', 'end': '08:00 pm'}, 'sat': {'start': '12:00 pm', 'end': '08:00 pm'}, 'sun': {'start': '12:00 pm', 'end': '08:00 pm'}}}
-        is_open = {'opening': False, 'delivery': False, 'pickup': False}
-        now = datetime.datetime.now()
-
-        for key in is_open:
-            schedule = self.active_locations[location_id]['schedule'][key]
-            for day in schedule:
-                if day == now.strftime("%a").lower():
-                    if schedule[day]['start'] != '00:00 pm' and schedule[day]['end'] != '00:00 pm':
-                        start = datetime.datetime.strptime(schedule[day]['start'], '%I:%M %p')
-                        end = datetime.datetime.strptime(schedule[day]['end'], '%I:%M %p')
-                        if start <= now <= end:
-                            is_open[key] = True
-        return is_open  
+        return f"{self.active_locations[location_id]['schedule']}" 
 
     def get_coupon(self, coupon_code: str) -> dict:
         '''Check if coupon code is valid.'''
@@ -424,8 +430,24 @@ class TastyIgniter():
         # Check if Pick-up is disabled
         if 'Pick-up is not available.' in content.text:
             options['offer_collection'] = False
+            print('Pick-up is not available.')
         else:
             # Current item in schedule
             current = schedule['pickup'][datetime.datetime.now().strftime('%a').lower()]
+            
+            # Start time in UTC
+            start = datetime.datetime.strptime(date + ' ' + current['start'], "%Y-%m-%d %I:%M %p")
+            # End time in UTC
+            end = datetime.datetime.strptime(date + ' ' + current['end'], "%Y-%m-%d %I:%M %p")
+        
+            print('start =', start)
+            print('end =', end)
+            print('now =', now)
+        
+            # Check if current time is between start and end times
+            if start <= now <= end:
+                options['offer_collection'] = True
+            else:
+                options['offer_collection'] = False
 
         return {'options': options, 'schedule': schedule}
