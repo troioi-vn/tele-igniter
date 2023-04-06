@@ -1,5 +1,5 @@
 # tele-igniter
-This telegram bot provides a way to order food from your TestyIgniter powered restaurant using Telegram.
+This telegram bot provides a way to order food from your [TestyIgniter](https://github.com/tastyigniter/TastyIgniter) powered restaurant using Telegram.
 Currently it is in development and it is not ready for production use. Further instructions will be added when the bot is ready for production use.
 
 For now, you can use the bot to test the features and report bugs. Current features are:
@@ -8,24 +8,26 @@ For now, you can use the bot to test the features and report bugs. Current featu
 - The cart functionality
 - Coupons plugin support
 
-Final goal is to have a bot that can be used by any restaurant that uses TestyIgniter as a backend. Including not only ordering, but also other user features like booking a table, etc. Plus hopefully admin functionality like managing orders, items and even some features that are not available in TestyIgniter like coupons generation after a certain amount of orders or something like that.
+Final goal is to relese a bot that can be used by any restaurant that uses TestyIgniter as a backend. Including not only ordering, but also other user features like booking a table, etc. Plus hopefully admin functionality like managing orders, items and even some features that are not available in TestyIgniter like coupons generation after a certain amount of orders or something like that.
 
 ## Roadmap
 ### MVP List of stoppers
 - Aply coupon to the item in the cart
 - Filtr coupons by location
 - Process delyvery fee
-- Add user location to order
-- Add user comment to order
-- Add phone number to order
-- Place order
-- Notifications for orders
+- Add user location to the order
+- Add user comment to the order
+- Add phone number to the order
+- Place an order
+- Notifications support
 
-### Beta
+### Beta todo list
 - Update setup.py, and test on a clean server
 - Chat with admin from the bot
 - Multi language support
 - Get closest locatios when when the user shares his location
+- Managing address book from the bot (wait for the [API to be ready](https://github.com/tastyigniter/ti-ext-api/issues/86))
+- Replace the temporary location info parcer with the [API call](https://github.com/tastyigniter/ti-ext-api/issues/85)
 
 ### First release
 - Support user matching between Telegram and Testyigniter
