@@ -1,6 +1,7 @@
 from classes import Config
 import json, os, random, string, logging
 
+
 class Dialogue:
     '''Class for storing user dialogs.'''
     def __init__(self, user_id, is_admin: bool = False):
@@ -85,7 +86,6 @@ class Dialogue:
         }
         self.cart = []
 
-        # Set up the logger
         # Set up the logger
         logging.basicConfig(
             level=logging.INFO,
@@ -251,3 +251,53 @@ class Dialogue:
             self.save()
         
         return int(current_location)
+
+
+class DialoguesManager:
+    '''Class for managing user dialogs.'''
+    def __init__(self, config):
+        '''Initialize DialogsManager class.'''
+        self.dialogues = {}
+        self.config = config
+        self.logger = self.logger()
+
+    def get_dialog(self, tg_user: dict) -> Dialogue:
+        '''Get user dialog from the list of dialogs.'''
+        # Create a new dialogue for this user in global dialogues dictionary
+        if tg_user['id'] not in self.dialogues:
+            # check if user is admin
+            is_admin = False if tg_user['id'] not in self.config['admins'] else True
+            # Create new dialogue 
+            self.dialogues[tg_user['id']] = Dialogue(tg_user['id'], is_admin)
+            self.logger.info(f"Created new dialogue for user {tg_user['id']}")
+        
+        # Update user name if it has changed
+        if self.dialogues[tg_user['id']].user['first_name'] != tg_user['first_name'] or self.dialogues[tg_user['id']].user['last_name'] != tg_user['last_name']:
+            self.dialogues[tg_user['id']].update_name(tg_user['first_name'], tg_user['last_name'])
+    
+        return self.dialogues[tg_user['id']]
+
+    def remove_dialog(self, user_id: int) -> None:
+        '''Remove user dialog from the list of dialogs.'''
+        # Delete cached user json file from cache folder named by user ID.json
+        filename = f"cache/user_{int(user_id)}.json"
+        if os.path.isfile(filename):
+            self.logger.info(f"Deleting cached user file {filename}")
+            os.remove(filename)
+        else:
+            self.logger.warning(f"Can't delete cached user file {filename}. File not found.")
+        
+        if user_id in self.dialogues:
+            self.dialogues.pop(user_id)
+            self.logger.info(f"Removed dialogue for user {user_id}")
+        else:
+            self.logger.warning(f"Can't remove dialogue for user {user_id}. Dialogue not found.")
+
+    def logger(self):
+        '''Get logger.'''
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S',
+        )
+        return logging.getLogger(__name__)

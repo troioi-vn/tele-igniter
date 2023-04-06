@@ -7,7 +7,7 @@ GitHub https://github.com/troioi-vn/tele-igniter
 import os, logging, re
 
 from classes import Config
-from dialogue import Dialogue
+from dialogue import DialoguesManager
 from tastyigniter import TastyIgniter
 from helpers import format_amount
 
@@ -21,7 +21,8 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
     """ All user actions are handled here.
     CallbackQueris, Commands, Text messages, Location messages, Phone messages."""
     
-    dialogue = dialogue_run(update.effective_user)
+    # dialogue = dialogue_run(update.effective_user)
+    dialogue = dm.get_dialog(update.effective_user)
     
     # Variables for reply
     reply_text = ''
@@ -44,16 +45,11 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
 
         # Handle /start command
         if command == "/start":
-            # Delete cached user json file from cache folder named by user ID.json
-            filename = f"cache/user_{int(dialogue.user_id)}.json"
-            if os.path.isfile(filename):
-                logger.info(f"Deleting cached user file {filename}")
-        
             # Delete dialogue object
-            del dialogues[dialogue.user_id]
+            dm.remove_dialog(dialogue.user_id)
             
             # Recreate dialogue object
-            dialogue = dialogue_run(update.message.from_user)
+            dialogue = dm.get_dialog(update.effective_user)
         
             # Send start message
             reply_text = config['start-message']
@@ -756,8 +752,10 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
 async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''Handle any message that is not a command'''
     query = update.message
-    dialogue = dialogue_run(query.from_user)
- 
+    
+    # dialogue = dialogue_run(query.from_user)
+    dialogue = dm.get_dialog(update.effective_user)
+    
     # Variables for reply
     reply_text = ''
     reply_markup = None
@@ -849,23 +847,6 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
 
 
-def dialogue_run(user: dict) -> Dialogue:
-    # Create a new dialogue for this user in global dialogues dictionary
-    # 
-    if user['id'] not in dialogues:
-        # check if user is admin
-        is_admin = False if user['id'] not in config['admins'] else True
-        # Create new dialogue
-        dialogues[user['id']] = Dialogue(user['id'], is_admin)
-        logger.info(f"Created new dialogue for user {user['id']}")
-    
-    # Update user name if it has changed
-    if dialogues[user['id']].user['first_name'] != user['first_name'] or dialogues[user['id']].user['last_name'] != user['last_name']:
-        dialogues[user['id']].update_name(user['first_name'], user['last_name'])
- 
-    return dialogues[user['id']]
-
-
 def main() -> None:
     """Run the telegram bot."""
     # Create the Application and pass it your bot's token.
@@ -884,10 +865,7 @@ def main() -> None:
     application.run_polling()
 
 
-if __name__ == "__main__":
-    # Create a dictionary for storing user dialogs
-    dialogues = {}
-
+if __name__ == "__main__":    
     # Set up the logger
     logging.basicConfig(
         level=logging.INFO,
@@ -896,7 +874,13 @@ if __name__ == "__main__":
     )
     logger = logging.getLogger(__name__)
 
+    # Load config
     config = Config()
+    
+    # Create a DialogsManager instance
+    dm = DialoguesManager(config)
+    
+    # Connect to TarastyIgniter API
     ti = TastyIgniter(config)
     
     main()
