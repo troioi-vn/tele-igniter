@@ -18,13 +18,8 @@ from telegram.error import BadRequest
 
 
 async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Parses
-        - CallbackQueris
-        - /start command
-        - text messages
-        - location messages
-        - phone messages
-    """
+    """ All user actions are handled here.
+    CallbackQueris, Commands, Text messages, Location messages, Phone messages."""
     
     dialogue = dialogue_run(update.effective_user)
     
