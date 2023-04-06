@@ -247,7 +247,7 @@ class TastyIgniter():
         return available_item_options
 
     def get_location_info(self, location_id: int) -> dict:
-        # Return location object
+        '''Returns location object'''
         
         # find location by id in active_locations
         for location in self.active_locations:
@@ -258,33 +258,67 @@ class TastyIgniter():
                 location['schedule'] = parsed_location['schedule']
                 return location        
 
-    def loacation_will(self, location_id: int) -> dict:
+    def get_location_statuses(self, location_id: int) -> dict:
         # Return location next opening/closing time for 'delivery', 'collection' and 'opening'
-        will = {'delivery': '', 'collection': '', 'opening': ''}
-        location = self.get_location_info(location_id)
-        now = datetime.now()
+        statuses = {
+            'delivery': {'status': False, 'starts': '', 'ends': ''},
+            'pickup': {'status': False, 'starts': '', 'ends': ''},
+            'opening': {'status': False, 'starts': '', 'ends': ''},
+        }
+        schedule = {}
         
-        if location['options']['offer_delivery']:
-            # Find closing time for delivery
+        # find location by id in active_locations
+        for location in self.active_locations:
+            if int(location['id']) == location_id:
+                schedule = location['schedule']
+                break
+        
+        # Check if now is in interval for today in schedule
+        current_day = datetime.datetime.now().strftime('%a').lower()
+        for order_type in statuses:
+            current = schedule[order_type][current_day]
+            # replace 00:00 pm with 11:59 pm
+            if current['start'] == '00:00 pm':
+                current['start'] = '11:59 pm'
+            if current['end'] == '00:00 pm':
+                current['end'] = '11:59 pm'
             
+            statuses[order_type]['status'] = self.is_now_between(current['start'], current['end'])
             
-            
-             
-            will['delivery'] = f"Delivery will close at"
-        else:
-            will['delivery'] = f"Delivery starts at"
-        return will
+            if statuses[order_type]['status']:
+                statuses[order_type]['ends'] = current['end']
+            else:
+                # Find next opening time in schedule
+                for day in schedule[order_type]:
+                    if schedule[order_type][day]['start'] != '00:00 pm':
+                        statuses[order_type]['starts'] = schedule[order_type][day]['start'] + " on " + datetime.datetime.strptime(day, '%a').strftime('%A')
+                        break
+        
+        return statuses
+    
+    def is_now_between(self, start_time, end_time) -> bool:
+        timezone_offset = self.config['ti-timezone-offset']
+        # Get current time
+        now = datetime.datetime.utcnow() + datetime.timedelta(hours=timezone_offset)
+        date = datetime.datetime.now().strftime('%Y-%m-%d')
 
+        # Convert start and end times to datetime objects
+        start_time = datetime.datetime.strptime(date + ' ' + start_time, "%Y-%m-%d %I:%M %p")
+        end_time = datetime.datetime.strptime(date + ' ' + end_time, "%Y-%m-%d %I:%M %p")
+        now = datetime.datetime.strptime(date + ' ' + now.strftime("%I:%M %p"), "%Y-%m-%d %I:%M %p")
+
+        # Check if current time is between start and end times
+        if start_time <= now <= end_time:
+            return True
+        else:
+            return False
+    
     def get_location_address(self, location_id: int) -> str:
         # Return location address: location_address_1 + location_address_2 + location_city
         return f"{self.active_locations[location_id]['attributes']['location_address_1']} {self.active_locations[location_id]['attributes']['location_address_2']} {self.active_locations[location_id]['attributes']['location_city']}"
 
     def get_location_name(self, location_id: int) -> str:
         return self.active_locations[location_id]['attributes']['location_name']
-
-    def get_location_working_hours(self, location_id: str) -> str:
-        # Return location working hours: turn location['schedule'] into a string
-        return f"{self.active_locations[location_id]['schedule']}" 
 
     def get_coupon(self, coupon_code: str) -> dict:
         '''Check if coupon code is valid.'''
@@ -296,10 +330,7 @@ class TastyIgniter():
 
     def parse_location_info(self, location: dict) -> dict:
         '''Temporary function to get location options via parsing 🤦‍♂️ location info page.'''    
-        
-        # Set timezone offset in hours from UTC
-        timezone_offset = 7
-
+    
         # Structure of the options dictionary from the documentation of the API
         options = {
             "offer_delivery": False,
@@ -319,7 +350,6 @@ class TastyIgniter():
             'delivery': {},
             'pickup': {}
         }
-
         
         # Generate URL to location info page
         url = self.config['ti-url'].replace('/api', '')
@@ -405,49 +435,20 @@ class TastyIgniter():
                     }
                 schedule[key][day] = will_be
 
-        # current Year-Month-Day
-        date = datetime.datetime.now().strftime('%Y-%m-%d')
-        # Current time in UTC
-        now = datetime.datetime.utcnow() + datetime.timedelta(hours=timezone_offset)
-
         # Check if ReDelivery is disabled
         if 'Delivery is not available.' in content.text:
             options['offer_delivery'] = False
         else:
             # Current item in schedule
             current = schedule['delivery'][datetime.datetime.now().strftime('%a').lower()]
-            # Start time in UTC
-            start = datetime.datetime.strptime(date + ' ' + current['start'], "%Y-%m-%d %I:%M %p")
-            # End time in UTC
-            end = datetime.datetime.strptime(date + ' ' + current['end'], "%Y-%m-%d %I:%M %p")
-            
-            # Check if current time is between start and end times
-            if start <= now <= end:
-                options['offer_delivery'] = True
-            else:
-                options['offer_delivery'] = False
+            options['offer_delivery'] = self.is_now_between(current['start'], current['end'])
 
         # Check if Pick-up is disabled
         if 'Pick-up is not available.' in content.text:
             options['offer_collection'] = False
-            print('Pick-up is not available.')
         else:
             # Current item in schedule
             current = schedule['pickup'][datetime.datetime.now().strftime('%a').lower()]
-            
-            # Start time in UTC
-            start = datetime.datetime.strptime(date + ' ' + current['start'], "%Y-%m-%d %I:%M %p")
-            # End time in UTC
-            end = datetime.datetime.strptime(date + ' ' + current['end'], "%Y-%m-%d %I:%M %p")
-        
-            print('start =', start)
-            print('end =', end)
-            print('now =', now)
-        
-            # Check if current time is between start and end times
-            if start <= now <= end:
-                options['offer_collection'] = True
-            else:
-                options['offer_collection'] = False
+            options['offer_collection'] = self.is_now_between(current['start'], current['end'])
 
         return {'options': options, 'schedule': schedule}

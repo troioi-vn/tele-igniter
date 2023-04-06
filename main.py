@@ -105,9 +105,20 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
             
             # Add location description to reply text
             reply_text += f"\n{location['attributes']['description']}"
+                        
+            location_statuses = ti.get_location_statuses(location_id)
             
-            reply_text += f"\n\nDelivery: {location['options']['offer_delivery']}"
-            reply_text += f"\nPickup: {location['options']['offer_collection']}"
+            reply_text += "\n"
+            
+            if location_statuses['delivery']['status']:
+                reply_text += f"\n✅ Delivery until {location_statuses['delivery']['ends']}"
+            else:
+                reply_text += f"\n⏸ Delivery will open at {location_statuses['delivery']['starts']}"
+            
+            if location_statuses['pickup']['status']:
+                reply_text += f"\n✅ Pickup until {location_statuses['pickup']['ends']}"
+            else:
+                reply_text += f"\n⏸ Pickup will open at {location_statuses['pickup']['starts']}"
             
             # Offer to select a category 
             for category_id in menu:

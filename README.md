@@ -12,7 +12,6 @@ Final goal is to have a bot that can be used by any restaurant that uses TestyIg
 
 ## Roadmap
 ### MVP List of stoppers
-- Show location working hours and current status
 - Aply coupon to the item in the cart
 - Filtr coupons by location
 - Process delyvery fee
@@ -20,7 +19,6 @@ Final goal is to have a bot that can be used by any restaurant that uses TestyIg
 - Add user comment to order
 - Add phone number to order
 - Place order
-- Check workhours for each location
 - Notifications for orders
 
 ### Beta
