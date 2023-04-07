@@ -86,6 +86,8 @@ class Dialogue:
         }
         self.cart = []
 
+        self.reset()
+
         # Set up the logger
         logging.basicConfig(
             level=logging.INFO,
@@ -98,6 +100,18 @@ class Dialogue:
         self.load()
 
         self.is_admin = is_admin
+
+    def reset(self):
+        # Variables for reply
+        self.reply_text = ''
+        self.reply_markup = None
+        self.nav_buttons = []
+        self.keyboard = []
+        self.image = None
+    
+        # Prepare navigation buttons
+        self.home_button = True 
+        self.cart_button = True
 
     def save(self):
         '''Save user dialog to json file.'''
