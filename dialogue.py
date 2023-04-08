@@ -1,5 +1,5 @@
 from classes import Config
-import json, os, random, string, logging
+import json, os, random, string, logging, re
 
 
 class Dialogue:
@@ -269,6 +269,18 @@ class Dialogue:
         
         return int(current_location)
 
+    def filter_text(self, text: str) -> str:
+        # List of allowed HTML tags
+        allowed_tags = ['b', 'strong', 'i', 'em', 'u', 'ins', 's', 'strike', 'del', 'span', 'a', 'code', 'pre']
+        
+        # Rmove all tags that are not allowed
+        text = re.sub(r'<(?!\/?(?:' + '|'.join(allowed_tags) + r'))[^>]+>', '', text)
+        
+        # Remove <br> and <p> tags
+        text = re.sub(r'<br>|<p>', '', text)
+        
+        return text
+        
 
 class DialoguesManager:
     '''Class for managing user dialogs.'''

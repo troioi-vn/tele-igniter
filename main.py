@@ -285,11 +285,12 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
 
                         # There are no unselected options
                         else:
-                            pass
+                            dialogue.cart_button = True
+                            print("!!!!")
     
                     # Create back to the item button
                     dialogue.keyboard.append([InlineKeyboardButton(f"⬅️ {item['attributes']['menu_name']}", callback_data=f"item-{str(item_id)}")])
-                    
+
                     # Create cancel button leadeing to remove item from cart
                     dialogue.keyboard.append([InlineKeyboardButton("❌ Cancel", callback_data="cart-"+str(uid)+"-remove")])
                 else:
@@ -574,7 +575,7 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
                         [KeyboardButton("Send phone number", request_contact=True)],
                         [KeyboardButton("❌ Cancel")] # ❌ is a sign to go after_request_screen
                     ])
-                    await query.message.dialogue.reply_text(dialogue.reply_text, reply_markup=dialogue.reply_markup, parse_mode=ParseMode.HTML)
+                    await query.message.reply_text(dialogue.reply_text, reply_markup=dialogue.reply_markup, parse_mode=ParseMode.HTML)
                     return
                 else:
                     order = dialogue.user['order']
@@ -690,14 +691,7 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
     if dialogue.image is not None:
         dialogue.reply_text = dialogue.reply_text + f" <a href=\"{dialogue.image}\">.</a>"
     
-    # List of allowed HTML tags
-    allowed_tags = ['b', 'strong', 'i', 'em', 'u', 'ins', 's', 'strike', 'del', 'span', 'a', 'code', 'pre']
-    
-    # Rmove all tags that are not allowed
-    dialogue.reply_text = re.sub(r'<(?!\/?(?:' + '|'.join(allowed_tags) + r'))[^>]+>', '', dialogue.reply_text)
-    
-    # Remove <br> and <p> tags
-    dialogue.reply_text = re.sub(r'<br>|<p>', '', dialogue.reply_text)
+    dialogue.reply_text = dialogue.filter_text(dialogue.reply_text)
 
     # Send the message or edit the existing one
     if dialogue.existed_message:
@@ -711,12 +705,12 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
     # If there is no message, send a new one
     else:
         try:
-            sent =  await update.message.dialogue.reply_text(dialogue.reply_text, reply_markup=dialogue.reply_markup, parse_mode=ParseMode.HTML)
+            sent =  await update.message.reply_text(dialogue.reply_text, reply_markup=dialogue.reply_markup, parse_mode=ParseMode.HTML)
             # Store message ID to dialogue for deleting later
             cat = dialogue.nav['message_ids'] + [sent.message_id] if 'message_ids' in dialogue.nav else [sent.message_id]
             dialogue.update_nav('message_ids', cat)
         except BadRequest:
-            await update.message.dialogue.reply_text(config['unknown-err'], reply_markup=dialogue.reply_markup, parse_mode=ParseMode.HTML)
+            await update.message.reply_text(config['unknown-err'], reply_markup=dialogue.reply_markup, parse_mode=ParseMode.HTML)
             logger.error("Error while sending message")
             logger.error(dialogue.reply_text)
 
@@ -793,7 +787,9 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if dialogue.image is not None:
         dialogue.reply_text = dialogue.reply_text + f" <a href=\"{dialogue.image}\">.</a>"
     
-    await query.dialogue.reply_text(dialogue.reply_text, reply_markup=dialogue.reply_markup, parse_mode=ParseMode.HTML)
+    await query.reply_text(dialogue.reply_text, reply_markup=dialogue.reply_markup, parse_mode=ParseMode.HTML)
+
+    print(dialogue.reply_markup)
 
     '''
     # Do we have a location message?
@@ -802,29 +798,29 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             # Get location
             location = update.message.location
             # Send latitute and longitude to user
-            await update.message.dialogue.reply_text(f"{location.latitude}, {location.longitude}")
+            await update.message.reply_text(f"{location.latitude}, {location.longitude}")
             return
 
         if update.message.contact is not None:
             # Get contact
             contact = update.message.contact
             # Send contact message
-            await update.message.dialogue.reply_text(f"Your phone number is +{contact.phone_number}")
+            await update.message.reply_text(f"Your phone number is +{contact.phone_number}")
             return
 
     # Request location if '/set' is sent
     if update.message.text == "/set":
         # Send location request
-        await update.message.dialogue.reply_text("Please send your location", dialogue.reply_markup=ReplyKeyboardMarkup([[KeyboardButton("Send location", request_location=True)]], one_time_keyboard=True))
+        await update.message.reply_text("Please send your location", reply_markup=ReplyKeyboardMarkup([[KeyboardButton("Send location", request_location=True)]], one_time_keyboard=True))
         return
     
     # Request telephone number if '/phone' is sent
     if update.message.text == "/phone":
         # Send contact sare request
-        await update.message.dialogue.reply_text("Please send your phone number", dialogue.reply_markup=ReplyKeyboardMarkup([[KeyboardButton("Send phone number", request_contact=True)]], one_time_keyboard=True))
+        await update.message.reply_text("Please send your phone number", reply_markup=ReplyKeyboardMarkup([[KeyboardButton("Send phone number", request_contact=True)]], one_time_keyboard=True))
 
     # replay with the same message
-    await update.message.dialogue.reply_text(update.message.text)
+    await update.message.reply_text(update.message.text)
     '''
 
 
