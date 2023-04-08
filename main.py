@@ -21,12 +21,9 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
     """ All user actions are handled here.
     CallbackQueris, Commands, Text messages, Location messages, Phone messages."""
     
-    # dialogue = dialogue_run(update.effective_user)
+    # Get user dialogue or create a new one
     dialogue = dm.get_dialog(update.effective_user)
-    dialogue.reset()
-    
-    # Send new message or edit existing one
-    existed_message = False
+    dialogue.new_answer()
     
     # Check if this is a command
     if update.message is not None and update.message.entities is not None and update.message.entities[0].type == MessageEntityType.BOT_COMMAND:
@@ -37,6 +34,8 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
         if command == "/start":
             # Send start message
             dialogue.reply_text = config['start-message']
+            dialogue.home_button = False
+            dialogue.cart_button = False
             
             # Single location mode
             if len(ti.active_locations) == 1:
@@ -48,14 +47,11 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
                 dialogue.reply_text += "\n\n" + "Please select a Restaurant:"
                 for location in ti.active_locations:
                     dialogue.keyboard.append([InlineKeyboardButton(location['attributes']['location_name'], callback_data="location-"+str(location['id']))])
-    
-            dialogue.home_button = False
-            dialogue.cart_button = False
-    
-    if update.callback_query is not None:
+
+    elif update.callback_query is not None:
         query = update.callback_query        
-        # dialogue = dialogue_run(query.from_user)
-        existed_message = True
+        dialogue.existed_message = True
+        
         # Log this event to logger
         logger.info(f"User {dialogue.user_id} pressed button {query.data}")
 
@@ -65,6 +61,8 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
         if query.data.startswith("location-"):
             location_id = int(query.data.split("-")[1])
             menu = ti.menus[location_id]
+            dialogue.home_button = False
+            
     
             # Check if location is active
             if location_id not in [int(location['id']) for location in ti.active_locations]:
@@ -115,9 +113,6 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
             if dialogue.is_admin:
                 # Reload button
                 dialogue.nav_buttons.append([InlineKeyboardButton("🔄 Reload", callback_data="admin-reload")])
-            
-            dialogue.home_button = False
-            dialogue.cart_button = False
                 
         # Handle category section
         elif query.data.startswith("category-"):
@@ -316,8 +311,6 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
     
             # Handle cart
             if action == None:
-                # Disable a cart button
-                dialogue.cart_button = False
                 # Check if cart is empty
                 if dialogue.cart_count() == 0:
                     dialogue.reply_text += "\n\nCart is empty"
@@ -511,11 +504,22 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
             # Handle order_type type selection. Set dialogue.user['order']['order_type'] = "delivery" | "collection"
             elif action == "order_type":
                 if params == None:
-                    attributes = ti.active_locations[location_id]['attributes']
-                    # Add text to reply
                     dialogue.reply_text += "\n\nWill you pick up the order yourself or choose delivery?"
                     dialogue.reply_text += f"\n\nRestaurant: {ti.get_location_name(location_id)}"
                     dialogue.reply_text += f"\nAddress: {ti.get_location_address(location_id)}"
+                    
+                    location_statuses = ti.get_location_statuses(location_id)
+                    
+                    dialogue.reply_text += "\n"
+                    if location_statuses['delivery']['status']:
+                        dialogue.reply_text += f"\n✅ Delivery until {location_statuses['delivery']['ends']}"
+                    else:
+                        dialogue.reply_text += f"\n⏸ Delivery will open at {location_statuses['delivery']['starts']}"
+                    
+                    if location_statuses['pickup']['status']:
+                        dialogue.reply_text += f"\n✅ Pickup until {location_statuses['pickup']['ends']}"
+                    else:
+                        dialogue.reply_text += f"\n⏸ Pickup will open at {location_statuses['pickup']['starts']}"
                     
                     # Add order type buttons
                     for delivery_type in config['ti-order-types']:
@@ -613,7 +617,7 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
         elif query.data.startswith("resetlocation-"):
             # Get step from button data
             step = str(query.data.split("-")[1])
-            dialogue.reply_text += "\n\n" + "Restet location"
+            
             # Handle request
             if step == "request":
                 # If cart is not empty, add warning to message text
@@ -664,7 +668,8 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
         # Home and cart buttons management     
         if query.data.startswith("cart-0-coupon"): dialogue.home_button = False
         elif query.data.startswith("location-"): dialogue.home_button = False
-  
+
+    # TODO: All code below should be moved to Dialogue class
     if dialogue.cart_button and dialogue.cart_count():
         dialogue.nav_buttons.append([InlineKeyboardButton(f"🛒 Cart ({dialogue.cart_count()})", callback_data="cart")])
   
@@ -695,7 +700,7 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
     dialogue.reply_text = re.sub(r'<br>|<p>', '', dialogue.reply_text)
 
     # Send the message or edit the existing one
-    if existed_message:
+    if dialogue.existed_message:
         await query.answer() # Answer the query to remove the loading animation
         try:
             await query.message.edit_text(dialogue.reply_text, reply_markup=dialogue.reply_markup, parse_mode=ParseMode.HTML)
@@ -736,10 +741,9 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
 async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''Handle any message that is not a command'''
     query = update.message
-    
-    # dialogue = dialogue_run(query.from_user)
     dialogue = dm.get_dialog(update.effective_user)
- 
+    dialogue.new_answer()
+    
     # If we have a text message
     if query.text is not None:
         text = query.text

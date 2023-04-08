@@ -289,10 +289,13 @@ class TastyIgniter():
                 statuses[order_type]['ends'] = current['end']
             else:
                 # Find next opening time in schedule
-                for day in schedule[order_type]:
-                    if schedule[order_type][day]['start'] != '00:00 pm':
-                        statuses[order_type]['starts'] = schedule[order_type][day]['start'] + " on " + datetime.datetime.strptime(day, '%a').strftime('%A')
-                        break
+                if self.is_now_before(current['start']):
+                    statuses[order_type]['starts'] = current['start']
+                else:
+                    for day in schedule[order_type]:
+                        if schedule[order_type][day]['start'] != '00:00 pm':
+                            statuses[order_type]['starts'] = schedule[order_type][day]['start'] + " on " + datetime.datetime.strptime(day, '%a').strftime('%A')
+                            break
         
         return statuses
     
@@ -309,6 +312,22 @@ class TastyIgniter():
 
         # Check if current time is between start and end times
         if start_time <= now <= end_time:
+            return True
+        else:
+            return False
+    
+    def is_now_before(self, start_time) -> bool:
+        timezone_offset = self.config['ti-timezone-offset']
+        # Get current time
+        now = datetime.datetime.utcnow() + datetime.timedelta(hours=timezone_offset)
+        date = datetime.datetime.now().strftime('%Y-%m-%d')
+
+        # Convert start and end times to datetime objects
+        start_time = datetime.datetime.strptime(date + ' ' + start_time, "%Y-%m-%d %I:%M %p")
+        now = datetime.datetime.strptime(date + ' ' + now.strftime("%I:%M %p"), "%Y-%m-%d %I:%M %p")
+
+        # Check if current time is before start time
+        if now < start_time:
             return True
         else:
             return False
