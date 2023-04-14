@@ -4,14 +4,14 @@ This bot provides a frontend for online food ordering on Telegram using Testigni
 GitHub https://github.com/troioi-vn/tele-igniter
 '''
 
-import os, logging, re
+import logging
 
-from classes import Config
 from dialogue import DialoguesManager
 from tastyigniter import TastyIgniter
 from helpers import format_amount
+from classes import Config
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 from telegram.constants import ParseMode, MessageEntityType
 from telegram.error import BadRequest
@@ -24,6 +24,9 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
     # Get user dialogue or create a new one
     dialogue = dm.get_dialog(update.effective_user)
     dialogue.new_answer()
+    
+    dialogue.context = context
+    dialogue.update = update
     
     # Check if this is a command
     if update.message is not None and update.message.entities is not None and update.message.entities[0].type == MessageEntityType.BOT_COMMAND:
@@ -566,16 +569,18 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
                 # Check if user did not enter phone number
                 elif dialogue.user['phone'] == None:
                     # Request user to enter phone number
-                    dialogue.reply_text = "Please enter your phone number to continue."
+                    dialogue.reply_text = "Please send us your phone number"
                     dialogue.reply_text += "\n\nYou can enter your phone number or send it to me by pressing the button below."
+                    dialogue.reply_text += "\n\nWe need your phone number <b>only</b> to contact you in case of any issues with your order."
                     
                     dialogue.update_nav('text_requested_for', 'phone')
                     dialogue.update_nav('after_request_screen', 'cart')
-                    dialogue.reply_markup=ReplyKeyboardMarkup([
+                    
+                    keyboard=ReplyKeyboardMarkup([
                         [KeyboardButton("Send phone number", request_contact=True)],
                         [KeyboardButton("❌ Cancel")] # ❌ is a sign to go after_request_screen
                     ])
-                    await query.message.reply_text(dialogue.reply_text, reply_markup=dialogue.reply_markup, parse_mode=ParseMode.HTML)
+                    await query.message.reply_text(dialogue.reply_text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
                     return
                 else:
                     order = dialogue.user['order']
@@ -718,19 +723,7 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
     if type(dialogue.nav['message_ids']) is not list:
         dialogue.nav['message_ids'] = []
 
-    # Check if we have more then one message in the dialogue
-    if 'message_ids' in dialogue.nav and len(dialogue.nav['message_ids']) > 1:
-        # Delete all messages except the last one
-        for message_id in dialogue.nav['message_ids'][:-1]:
-            try:
-                await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=message_id)
-            except BadRequest as e:
-                logger.warning(f"Could not delete message {message_id}: {e}")                
-            else:
-                logger.info(f"Deleted {len(dialogue.nav['message_ids'])-1} messages")
-        # Anyways, keep only the last message ID in dialogue
-        dialogue.update_nav('message_ids', dialogue.nav['message_ids'][-1:])
-    
+    await dialogue.keep_one_message()
 
 async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''Handle any message that is not a command'''
@@ -748,6 +741,10 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             # Reset text_requested_for
             dialogue.update_nav('text_requested_for', None)
             
+            # Remove reply keyboard
+            sent = await query.reply_text(dialogue.reply_text, reply_markup=ReplyKeyboardRemove(), parse_mode=ParseMode.HTML)
+            await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=sent.message_id)
+        
             # Add continue button
             dialogue.keyboard.append([InlineKeyboardButton("Continue", callback_data=dialogue.nav['after_request_screen'])])
             

@@ -1,6 +1,6 @@
 from classes import Config
 import json, os, random, string, logging, re
-
+from telegram.error import BadRequest
 
 class Dialogue:
     '''Class for storing user dialogs.'''
@@ -85,6 +85,8 @@ class Dialogue:
             'message_ids': [], # Message IDs we sent to user. Used for deleting messages.
         }
         self.cart = []
+        self.context = None
+        self.update = None
 
         self.new_answer()
 
@@ -281,6 +283,21 @@ class Dialogue:
         
         return text
         
+    async def keep_one_message(self) -> None:
+        '''Keep only one message in the chat.'''
+        # Check if we have more then one message in the dialogue
+        if 'message_ids' in self.nav and len(self.nav['message_ids']) > 1:
+            # Delete all messages except the last one
+            for message_id in self.nav['message_ids'][:-1]:
+                try:
+                    await self.context.bot.delete_message(chat_id=self.update.effective_chat.id, message_id=message_id)
+                except BadRequest as e:
+                    self.logger.warning(f"Could not delete message {message_id}: {e}")                
+                else:
+                    self.logger.info(f"Deleted {len(self.nav['message_ids'])-1} messages")
+            # Anyways, keep only the last message ID in dialogue
+            self.update_nav('message_ids', self.nav['message_ids'][-1:])
+
 
 class DialoguesManager:
     '''Class for managing user dialogs.'''
