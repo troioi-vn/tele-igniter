@@ -182,7 +182,10 @@ class TastyIgniter():
         self.api_request_counter += 1
 
         # Create Bearer authorization header
-        headers =  {"Content-Type":"application/json", "Authorization": f"Bearer {self.config['ti-token']}"}
+        headers =  {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.config['ti-token']}"
+        }
 
         # Request API
         try:
@@ -304,6 +307,11 @@ class TastyIgniter():
         # Get current time
         now = datetime.datetime.utcnow() + datetime.timedelta(hours=timezone_offset)
         date = datetime.datetime.now().strftime('%Y-%m-%d')
+
+        if start_time == '00:00 pm':
+            start_time = '12:00 am'
+        if end_time == '00:00 pm':
+            end_time = '12:00 am'
 
         # Convert start and end times to datetime objects
         start_time = datetime.datetime.strptime(date + ' ' + start_time, "%Y-%m-%d %I:%M %p")
@@ -471,3 +479,38 @@ class TastyIgniter():
             options['offer_collection'] = self.is_now_between(current['start'], current['end'])
 
         return {'options': options, 'schedule': schedule}
+    
+    def format_amount(self, amount: float | int | str, code: str = 'USD', decimals: int = 0) -> str:
+        '''Format amount to string with currency symbol.'''
+        symbols = {
+            'VND': '₫',
+            'USD': '$',
+            'EUR': '€',
+            'GBP': '£',
+            'JPY': '¥',
+            'CNY': '¥',
+            'KRW': '₩',
+            'UAH': '₴',
+            'RUB': '₽',
+        }
+        # Convert amount to float
+        amount = float(amount)
+        # Add thousands separator if amount is greater than 1000
+        if amount > 1000:
+            amount = f"{amount:,.{decimals}f}"
+        else:
+            amount = f"{amount:.{decimals}f}"
+
+        # Replace coma with space
+        amount = amount.replace(",", " ")
+
+        # Get currency symbol from ti.currencies dictionary by an attribute currency_code
+        currency_symbol = symbols[code] if code in symbols else code
+        
+        # Return formatted amount
+        return f"{amount} {currency_symbol}"
+
+    def place_order() -> bool:
+        "Placing order via API and "
+        
+        

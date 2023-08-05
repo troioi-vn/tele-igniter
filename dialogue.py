@@ -5,7 +5,6 @@ from telegram.error import BadRequest
 class Dialogue:
     '''Class for storing user dialogs.'''
     def __init__(self, user_id, is_admin: bool = False):
-        '''Initialize Dialogue class.'''
         self.config = Config()
         self.user_id = user_id # Telegram user ID
         self.user = {
@@ -24,6 +23,8 @@ class Dialogue:
                 'last_name':  None,
                 'email': self.config['ti-customer']['email'],
                 'order_type': 'delivery', # delivery | collection (for pick-up)
+                'delivery_address': None,
+                'payment_method': 'cod',
                 'total_items' : 0,
                 'order_total': 0.0,
                 'order_totals': [
@@ -338,6 +339,16 @@ class DialoguesManager:
             self.logger.info(f"Removed dialogue for user {user_id}")
         else:
             self.logger.warning(f"Can't remove dialogue for user {user_id}. Dialogue not found.")
+
+    def send_message(self, tg_user: dict, text: str, reply_markup=None, parse_mode=None, disable_web_page_preview=None) -> int:
+        '''Send message to user.'''
+        # Get user dialog
+        dialogue = self.get_dialog(tg_user)
+        # Send message
+        message_id = dialogue.send_message(text, reply_markup, parse_mode, disable_web_page_preview)
+        # Save user dialog
+        dialogue.save()
+        return message_id
 
     def logger(self):
         '''Get logger.'''

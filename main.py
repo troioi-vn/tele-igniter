@@ -8,7 +8,6 @@ import logging
 
 from dialogue import DialoguesManager
 from tastyigniter import TastyIgniter
-from helpers import format_amount
 from classes import Config
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
@@ -53,7 +52,7 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
 
     elif update.callback_query is not None:
         query = update.callback_query        
-        dialogue.existed_message = True
+        dialogue.existed_message = True # Because we are editing a message, not sending a new one
         
         # Log this event to logger
         logger.info(f"User {dialogue.user_id} pressed button {query.data}")
@@ -132,7 +131,8 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
             for item_id in ti.menus[location_id][category_id]:
                 item = ti.menu_items[item_id]
                 # Format price with spaces after every 3 digits from the end
-                price = format_amount(item['data']['attributes']['menu_price'], item['data']['attributes']['currency'])
+                price = ti.format_amount(item['data']['attributes']['menu_price'], item['data']['attributes']['currency'])
+                
                 # Add items to keyboard
                 dialogue.keyboard.append([InlineKeyboardButton(f"{item['data']['attributes']['menu_name']} {price}", callback_data="item-"+str(item_id))])
             
@@ -178,7 +178,7 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
                 dialogue.reply_text += f"\n\n{item['attributes']['menu_description']}"
 
                 # Add item price to reply text
-                dialogue.reply_text += "\n\n" + f"Price: {format_amount(item['attributes']['menu_price'], item['attributes']['currency'])} {item['attributes']['currency']}"
+                dialogue.reply_text += "\n\n" + f"Price: {ti.format_amount(item['attributes']['menu_price'], item['attributes']['currency'])} {item['attributes']['currency']}"
                 
                 # Check is there image for this item
                 if 'included' in ti.menu_items[item_id]:
@@ -276,7 +276,7 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
                                     default_option_value_id = option_value['menu_option_value_id']
 
                                 # Add option button
-                                dialogue.keyboard.append([InlineKeyboardButton(f"{option_value['name']} (+{format_amount(option_value['price'], item['attributes']['currency'])})", callback_data=f"cart-{str(uid)}-setoption-{str(option_value['menu_option_value_id'])}")])
+                                dialogue.keyboard.append([InlineKeyboardButton(f"{option_value['name']} (+{ti.format_amount(option_value['price'], item['attributes']['currency'])})", callback_data=f"cart-{str(uid)}-setoption-{str(option_value['menu_option_value_id'])}")])
                             
                             # Add Skip button if option is not required and default option value is set
                             if not option['attributes']['required']:
@@ -331,13 +331,13 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
                         # Add items to the message text
                         if cart_item['quantity'] == 1:
                             dialogue.reply_text += f"\n\n<b>{k}. {item['attributes']['menu_name']}</b>\n"
-                            dialogue.reply_text += f"{format_amount(item['attributes']['menu_price'], item['attributes']['currency'])}"
+                            dialogue.reply_text += f"{ti.format_amount(item['attributes']['menu_price'], item['attributes']['currency'])}"
                         else:
                             dialogue.reply_text += f"\n\n<b>{k}. {item['attributes']['menu_name']}</b>\n"
-                            dialogue.reply_text += f"{format_amount(item['attributes']['menu_price'], item['attributes']['currency'])} x {cart_item['quantity']}"
+                            dialogue.reply_text += f"{ti.format_amount(item['attributes']['menu_price'], item['attributes']['currency'])} x {cart_item['quantity']}"
                             
                             items_price = item['attributes']['menu_price'] * cart_item['quantity']
-                            dialogue.reply_text += f" = {format_amount(items_price, item['attributes']['currency'])}"
+                            dialogue.reply_text += f" = {ti.format_amount(items_price, item['attributes']['currency'])}"
                         # Add options to the message text
                         if len(cart_item['options']) > 0:
                             for option in cart_item['options']:
@@ -345,7 +345,7 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
                                     if option['price'] == 0:
                                         dialogue.reply_text += f"\n{option['name']}"
                                     else:
-                                        dialogue.reply_text += f"\n{option['name']} (+{format_amount(option['price'], option['currency'])})"
+                                        dialogue.reply_text += f"\n{option['name']} (+{ti.format_amount(option['price'], option['currency'])})"
                                         subtotal += option['price'] * cart_item['quantity']
 
                     total = subtotal
@@ -365,12 +365,12 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
                         
                         if delivery_fee == 0:
                             if delivery_free_limit > 0:
-                                dialogue.reply_text += f"\n\nDelivery fee: <s>{format_amount(config['tmp-delivery-fee'], item['attributes']['currency'])}</s> {format_amount(0, item['attributes']['currency'])}"
+                                dialogue.reply_text += f"\n\nDelivery fee: <s>{ti.format_amount(config['tmp-delivery-fee'], item['attributes']['currency'])}</s> {ti.format_amount(0, item['attributes']['currency'])}"
                             else:
-                                dialogue.reply_text += f"\n\nDelivery fee: {format_amount(0, item['attributes']['currency'])}"
+                                dialogue.reply_text += f"\n\nDelivery fee: {ti.format_amount(0, item['attributes']['currency'])}"
                         else:
-                            dialogue.reply_text += f"\n\nDelivery fee: {format_amount(delivery_fee, item['attributes']['currency'])}"
-                            dialogue.reply_text += " (Free delivery for orders over " + format_amount(config['tmp-delivery-free-limit'], item['attributes']['currency']) + ")"
+                            dialogue.reply_text += f"\n\nDelivery fee: {ti.format_amount(delivery_fee, item['attributes']['currency'])}"
+                            dialogue.reply_text += " (Free delivery for orders over " + ti.format_amount(config['tmp-delivery-free-limit'], item['attributes']['currency']) + ")"
                             total += delivery_fee
                     # Pickup
                     elif dialogue.user['order']['order_type'] == 'collection':
@@ -384,7 +384,7 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
                         # Check coupon type
                         if coupon['attributes']['type'] == "F": # Fixed amount
                             discount = float(coupon['attributes']['discount'])
-                            dialogue.reply_text += f"\n\n🎁 <code>{coupon['attributes']['code']}</code> (-{format_amount(discount, config['ti-currency-code'])})"
+                            dialogue.reply_text += f"\n\n🎁 <code>{coupon['attributes']['code']}</code> (-{ti.format_amount(discount, config['ti-currency-code'])})"
                             total -= discount
                         elif coupon['attributes']['type'] == "P": # Percentage
                             discount = subtotal * coupon['attributes']['discount'] / 100
@@ -401,11 +401,11 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
         
                     # If discount > 0 add discount to message text
                     if discount > 0:
-                        dialogue.reply_text += f"\n\nSubtotal: {format_amount(subtotal, config['ti-currency-code'])}"
-                        dialogue.reply_text += f"\nDiscount: -{format_amount(discount, config['ti-currency-code'])}"
-                        dialogue.reply_text += f"\n<b>Total: {format_amount(total, config['ti-currency-code'])}</b>"
+                        dialogue.reply_text += f"\n\nSubtotal: {ti.format_amount(subtotal, config['ti-currency-code'])}"
+                        dialogue.reply_text += f"\nDiscount: -{ti.format_amount(discount, config['ti-currency-code'])}"
+                        dialogue.reply_text += f"\n<b>Total: {ti.format_amount(total, config['ti-currency-code'])}</b>"
                     else:
-                        dialogue.reply_text += f"\n\n<b>Total: {format_amount(total, config['ti-currency-code'])}</b>"
+                        dialogue.reply_text += f"\n\n<b>Total: {ti.format_amount(total, config['ti-currency-code'])}</b>"
                     
                     # Add select order_type button and checkout button
                     dialogue.keyboard.append([
@@ -560,14 +560,54 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
         # Handle checkout
         elif query.data.startswith("checkout"):
                 dialogue.reply_text += "<b>Checkout</b>"
+                order = dialogue.user['order']
+                ready_to_checkout = True
                 
-                # Check if cart is empty
                 if dialogue.cart_count() == 0:
+                    ready_to_checkout = False
                     dialogue.reply_text += "\n\nYour cart is empty. Please add some items to cart"
                     # Create button to home screen
-                    dialogue.keyboard.append([InlineKeyboardButton("🏠 Home", callback_data=f"location-{dialogue.nav['current_location']}")])
+                elif order['order_type'] == 'delivery' and order['delivery_address'] == None:
+                    ready_to_checkout = False
+                    dialogue.reply_text += "\n\nWe need your delivery address to complete the order"
+                    # Add button to set delivery address
+                    dialogue.keyboard.append([InlineKeyboardButton("📍 Set delivery address", callback_data=f"cart-0-delivery_address")])
+                    
+                # Check if all is good to checkout
+                if ready_to_checkout:
+                    # Liast all checkout parameters and their values
+                    dialogue.reply_text += "\n\n<b>Order details</b>"
+                    if order['order_type'] == 'delivery':
+                        dialogue.reply_text += f"🚚 Your order will be delivered to: <b>{order['delivery_address']}</b>\n"
+                    elif order['order_type'] == 'collection':
+                        # Add pickup address to the message text
+                        dialogue.reply_text += f"\n\nPick up from: {ti.get_location_name(location_id)}"
+                        dialogue.reply_text += f"\nAddress: {ti.get_location_address(location_id)}"
+                      
+                    # Payment method
+                    # Temporarily solution to handle empty payments array (options.payments) returned by API.
+                    
+                    # Add payment method to the message text
+                    payment_method = config['ti-payment-methods'][order['payment_method']]
+                    dialogue.reply_text += f"\n\n💵 Payment method: <b>{payment_method['name']}</b>"
+                    
+                    
+                    
+                    # dialogue.reply_text += f"\n\n💵 Payment method: <b>{order['payment_method']}</b>"
+                    
+                    
+                    # Check if in cart are items that couldn't be delivered
+                    # undeliverable_items = dialogue.cart_get_undeliverable_items()
+                    
+                    # Add button to change delivery method
+                    dialogue.keyboard.append([InlineKeyboardButton("Change delivery method", callback_data=f"checkout-deliverymethod")])
+                    
+                    # Add button to change payment method
+                    dialogue.keyboard.append([InlineKeyboardButton("Change payment method", callback_data=f"checkout-paymentmethod")])
+                
+                    
                 # Check if user did not enter phone number
-                elif dialogue.user['phone'] == None:
+                '''elif dialogue.user['phone'] == None:
                     # Request user to enter phone number
                     dialogue.reply_text = "Please send us your phone number"
                     dialogue.reply_text += "\n\nYou can enter your phone number or send it to me by pressing the button below."
@@ -582,42 +622,8 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
                     ])
                     await query.message.reply_text(dialogue.reply_text, reply_markup=keyboard, parse_mode=ParseMode.HTML)
                     return
-                else:
-                    order = dialogue.user['order']
                     '''
-                    Requare user to enter:
-                    - Payment method (default: cod)
-                    - Delivery method (default: delivery)
-                    - Delivery address or user location
-                    
-                    Optional:
-                    - Ask for delivery time 
-                    - Ask for phone number
-                    - Ask for comment
-                    '''
-                    
-                    # Liast all checkout parameters and their values
-                    dialogue.reply_text += "\n\n"
-                    # Delivery method
-                    if order['order_type'] == 'delivery':
-                        # Delivery method
-                        dialogue.reply_text += f"🚚 Your order will be delivered to: <b>{order['delivery_address']}</b>\n"
-                    elif order['order_type'] == 'collection':
-                        # Delivery method
-                        dialogue.reply_text += f"You can pick up your order from: <b>{ti.active_locations[dialogue.nav['current_location']]['name']}</b>\n"
-                        # Location address
-                        dialogue.reply_text += f"📍 Address: <b>{ti.active_locations[dialogue.nav['current_location']]['location_address_1']}</b>\n"
-                        if ti.active_locations[dialogue.nav['current_location']]['location_address_2']:
-                            dialogue.reply_text += f"<b>{ti.active_locations[dialogue.nav['current_location']]['location_address_2']}</b>\n"
-                    
-                    # Payment method
-                    dialogue.reply_text += f"💵 Payment method: <b>{dialogue.checkout['payment_method']}</b>\n"
-                    
-                    # Add button to change delivery method
-                    dialogue.keyboard.append([InlineKeyboardButton("Change delivery method", callback_data=f"checkout-deliverymethod")])
-                    
-                    # Add button to change payment method
-                    dialogue.keyboard.append([InlineKeyboardButton("Change payment method", callback_data=f"checkout-paymentmethod")])
+                
         
         # Handle location reset request and confirmation
         elif query.data.startswith("resetlocation-"):
@@ -675,7 +681,6 @@ async def process_usser_action(update: Update, context: ContextTypes.DEFAULT_TYP
         if query.data.startswith("cart-0-coupon"): dialogue.home_button = False
         elif query.data.startswith("location-"): dialogue.home_button = False
 
-    # TODO: All code below should be moved to Dialogue class
     if dialogue.cart_button and dialogue.cart_count():
         dialogue.nav_buttons.append([InlineKeyboardButton(f"🛒 Cart ({dialogue.cart_count()})", callback_data="cart")])
   
@@ -819,7 +824,6 @@ async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # replay with the same message
     await update.message.reply_text(update.message.text)
     '''
-
 
 def main() -> None:
     """Run the telegram bot."""
